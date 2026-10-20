@@ -16,7 +16,9 @@ Este proyecto **no oficial** conserva el diseño HTML V3 y lo ejecuta como una i
 
 El proyecto **no utiliza el portal web de SmartMovePro**: se conecta directamente al WebService SOAP de la APK MOQSA 1.7 mediante HTTPS (`https://clswbsas.smartmovepro.net/ModuloParadas/SWParadas.asmx`). Verificado: WSDL HTTP 200 y respuestas autenticadas. La API del puente se despliega en `https://moqsa-moderno-api.vercel.app`; las claves del servicio se mantienen en variables privadas del servidor.
 
-**Pendiente crítico:** el campo `SOAP_ENTITY` ("número de entidad" de la configuración original) solo está almacenado en las preferencias de la instalación original, no se incluye en el APK descargado. Por eso no hay todavía líneas ni arribos confirmados. No improvisar códigos, ni comunicar que la app ya funciona con ETA real. Configurar ese número en el servidor al recuperarlo de la app original y comprobar `/v1/lineas` con resultados no vacíos antes de validar Android.
+**Conexión validada:** el APK original contiene el valor por defecto de entidad `4` (leído desde `SharedPreferences.getInt("entidad", 4)`) y envía `codigoAplicacion=24` en la operación de arribos. Ambos se configuraron en el proyecto Vercel como variables privadas del entorno de producción.
+
+Prueba real verificada en [GitHub Actions](https://github.com/pereyradiego8/moqsa-moderno/actions/runs/39517233529): 16 líneas, línea 159 1, 52 calles, intersección 50521, parada MO-01080 y una respuesta de llegada **«25 min. aprox.»** durante la prueba. Son datos vivos del proveedor, no horarios simulados. La respuesta podría cambiar con el tiempo. No implica que el APK ya haya sido probado en un teléfono.
 
 ## Conectar datos reales
 1. Desplegar `backend/` en un servidor HTTPS (por ejemplo Vercel, Root Directory = `backend`).
@@ -24,7 +26,7 @@ El proyecto **no utiliza el portal web de SmartMovePro**: se conecta directament
 3. La app Android utiliza por defecto la URL HTTPS del puente anterior; en **Más → Configuración** se puede cambiar si se migra el servidor.
 4. Consultar Líneas y comparar con el cliente anterior; repetir hasta comprobar arribos reales.
 
-**El backend no queda configurado automáticamente.** Sin credenciales y servidor autorizados, las pantallas informan el error en vez de inventar horarios. El proyecto anterior contenía un puente SOAP JSON útil que se migró y mantiene pruebas.
+**El backend está configurado en el proyecto Vercel conectado**. En otros despliegues se deberán configurar las variables de servidor; las credenciales nunca se deben poner en GitHub ni en la app Android. Si falla la conexión, las pantallas muestran un error en vez de inventar arribos.
 
 ## Estado y límites
 - Interfaz V3 real de la conversación, sin líneas ni horarios sintéticos en las pantallas funcionales.
@@ -33,6 +35,6 @@ El proyecto **no utiliza el portal web de SmartMovePro**: se conecta directament
 - Los recorridos exponen los puntos recibidos; todavía falta mapa.
 - GPS, voz, reclamos y rutas personalizadas siguen señaladas como pendientes, sin falsas funcionalidades.
 - Solo HTTPS entre Android y el puente. HTTP hacia SOAP antiguo está desactivado por defecto (`ALLOW_LEGACY_HTTP=false`); habilitarlo únicamente tras evaluación específica.
-- Una vez que pase CI, los datos reales requieren pruebas de extremo a extremo.
+- El backend ya pasó un recorrido real de extremo a extremo. Faltan pruebas de instalación, navegación y funcionamiento en teléfono Android.
 
 Proyecto independiente, no afiliado oficialmente a MOQSA. No desinstalar la app antigua hasta validar la nueva.
