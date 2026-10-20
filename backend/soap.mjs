@@ -41,6 +41,7 @@ export function parseSoapXml(xml, method){
 export class BackendError extends Error {constructor(status,msg){super(msg);this.status=status;}}
 export async function callSoap(kind,query){
  const operation=OPERATIONS[kind];if(!operation)throw new BackendError(404,'Operación desconocida');
+ if(kind==='lineas'&&!env('SOAP_ENTITY'))throw new BackendError(503,'Falta configurar el número de entidad que utiliza el APK original');
  const recharge=kind==='recargas';
  const endpoint=env(recharge?'SOAP_RECHARGE_ENDPOINT':'SOAP_ENDPOINT');
  const user=env(recharge?'SOAP_RECHARGE_USER':'SOAP_USER');
