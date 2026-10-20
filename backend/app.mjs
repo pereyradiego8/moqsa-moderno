@@ -24,7 +24,7 @@ export async function handler(req,res){
   if(req.method!=='GET')throw new BackendError(405,'Método no admitido');
   if((req.url||'').length>2000)throw new BackendError(414,'URL muy larga');
   const url=new URL(req.url||'/', 'http://localhost');
-  if(url.pathname==='/health'){json(res,200,{ok:true,service:'CuandoLlega API',configured:Boolean(process.env.SOAP_ENDPOINT&&process.env.SOAP_USER&&process.env.SOAP_PASSWORD)});return;}
+  if(url.pathname==='/health'){json(res,200,{ok:true,service:'CuandoLlega API',configured:Boolean(process.env.SOAP_ENDPOINT&&process.env.SOAP_USER&&process.env.SOAP_PASSWORD&&process.env.SOAP_ENTITY)});return;}
   const match=/^\/v1\/(lineas|calles|intersecciones|paradas|cercanas|arribos|recorrido|recargas)$/.exec(url.pathname);
   if(!match)throw new BackendError(404,'Ruta inexistente');
   const kind=match[1];ratelimit(req.socket?.remoteAddress||'unknown');
