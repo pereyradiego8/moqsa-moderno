@@ -18,6 +18,14 @@ jobs:
           for scheme in http https; do
             echo "PROBE ${scheme}"
             curl -sS -L --max-time 15 -o /tmp/response-soap.txt -w 'HTTP_CODE=%{http_code} IP=%{remote_ip} SIZE=%{size_download} FINAL=%{url_effective}\n' "${scheme}://clswbsas.smartmovepro.net/ModuloParadas/SWParadas.asmx?WSDL"
-            head -c 100 /tmp/response-soap.txt | sed -E 's/(usuario|clave|password).*/[REDACTED]/Ig'
+            if [ "$scheme" = https ]; then
+              python3 - <<'PY'
+import re
+s=open('/tmp/response-soap.txt').read()
+for key in ['codigoEntidadSMP','codigoAplicacion','codigoLineaParada','usuario','clave']:
+  matches=re.findall(r'<(?:s:)?element[^>]*?name="'+re.escape(key)+r'"[^>]*>',s,re.I)
+  print('SCHEMA',key,' | '.join(matches[:2])[:350])
+PY
+            fi
             echo
           done
