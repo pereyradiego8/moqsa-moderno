@@ -144,6 +144,23 @@ public final class MainActivity extends Activity {
         EditText url=field("https://tu-servidor.example.com",api.base());url.setInputType(android.text.InputType.TYPE_TEXT_VARIATION_URI);c.addView(url,lp(-1,54));space(c,16);
         c.addView(button("Guardar conexión",true,()->{try{api.setBase(url.getText().toString());Toast.makeText(this,"Servidor guardado",Toast.LENGTH_SHORT).show();home();}catch(Exception e){url.setError(e.getMessage());}}),lp(-1,50));
         space(body,8);body.addView(para("El backend debe implementar el contrato /v1 descrito en README.md. Si todavía no hay servidor activo, los buscadores mostrarán el motivo y ofrecerán reintentar. La APK original sigue siendo independiente."));
+        space(body,10);
+        body.addView(button("Comprobar conexión",false,()->{
+            pool.execute(()->{
+                try {
+                    JSONObject health=api.health();
+                    boolean configured=health.optBoolean("configured",false);
+                    ui.post(()->new AlertDialog.Builder(this)
+                        .setTitle("Estado del servidor")
+                        .setMessage(configured?"Backend HTTPS activo y con acceso SOAP configurado. Probá la búsqueda de líneas para comprobar los datos reales.":"Backend HTTPS disponible, pero falta configurar el acceso autorizado de MOQSA para obtener líneas y horarios reales.")
+                        .setPositiveButton("Aceptar",(d,w)->{}).show());
+                } catch(Exception ex) {
+                    ui.post(()->new AlertDialog.Builder(this)
+                        .setTitle("No se pudo conectar")
+                        .setMessage(ex.getMessage()).setPositiveButton("Aceptar",(d,w)->{}).show());
+                }
+            });
+        }),lp(-1,50));
         space(body,20);body.addView(button("Volver",false,()->onBackPressed()),lp(-1,50));
     }
     private EditText field(String hint,String value){EditText e=new EditText(this);e.setSingleLine(true);e.setTextSize(16);e.setTextColor(INK);e.setHintTextColor(MUTED);e.setHint(hint);e.setPadding(dp(13),dp(10),dp(13),dp(10));e.setBackground(stroke(Color.WHITE,13,STROKE));if(value!=null)e.setText(value);return e;}

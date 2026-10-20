@@ -10,7 +10,7 @@ import java.net.*;
 public final class ApiClient {
     private final SharedPreferences prefs;
     public ApiClient(Context context) { prefs=context.getSharedPreferences("config",Context.MODE_PRIVATE); }
-    public String base() { return prefs.getString("base", "").trim(); }
+    public String base() { return prefs.getString("base", BuildConfig.DEFAULT_API_BASE_URL).trim(); }
     public void setBase(String value) {
         String s=value.trim().replaceAll("/+$","");
         if(!s.matches("(?i)^https://[^\\s/?#]+(?::[0-9]{2,5})?(?:/[^\\s?#]*)?$")) throw new IllegalArgumentException("La dirección debe empezar con https:// y ser válida.");
@@ -21,9 +21,11 @@ public final class ApiClient {
         try {return URLEncoder.encode(s==null?"":s,"UTF-8");}
         catch(java.io.UnsupportedEncodingException ignored){throw new IllegalStateException("UTF-8 no disponible");}
     }
-    public JSONObject get(String path) throws Exception {
+    public JSONObject health() throws Exception { return request("/health"); }
+    public JSONObject get(String path) throws Exception { return request("/v1/" + path); }
+    private JSONObject request(String path) throws Exception {
         if(!ready())throw new IOException("Falta configurar el servidor HTTPS en Ajustes.");
-        URL u=new URL(base() + "/v1/" + path);
+        URL u=new URL(base() + path);
         if(!"https".equalsIgnoreCase(u.getProtocol()))throw new IOException("Solo se permite HTTPS.");
         HttpURLConnection c=(HttpURLConnection)u.openConnection();
         c.setConnectTimeout(9500);c.setReadTimeout(11500);c.setRequestMethod("GET");
