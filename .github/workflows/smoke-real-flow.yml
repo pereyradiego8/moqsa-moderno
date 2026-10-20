@@ -1,0 +1,52 @@
+name: Validar flujo real MOQSA
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/smoke-real-flow.yml']
+permissions:
+  contents: read
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Líneas -> calles -> intersecciones -> paradas -> llegadas
+        env:
+          API_URL: https://moqsa-moderno-api.vercel.app
+        run: |
+          node --input-type=module <<'JS'
+          async function get(path) {
+            const controller=new AbortController(), t=setTimeout(()=>controller.abort(),18000);
+            try {
+              const response=await fetch(process.env.API_URL+path,{signal:controller.signal});
+              const data=await response.json();
+              console.log(path.split('?')[0], 'http',response.status,'ok',data.ok,'items',data.items?.length,'mensaje',String(data.mensaje||data.error||'').slice(0,120));
+              if(!response.ok||!data.ok)throw Error('Consulta fallida '+path.split('?')[0]);
+              return data.items||[];
+            } finally {clearTimeout(t);}
+          }
+          const lines=await get('/v1/lineas');
+          if(!lines.length)throw Error('No hay líneas en backend');
+          let line,streets;
+          for(const entry of lines.slice(0,3)){
+            const found=await get('/v1/calles?linea='+encodeURIComponent(entry.id));
+            if(found.length){line=entry;streets=found;break;}
+          }
+          if(!line)throw Error('No se recibieron calles de las primeras tres líneas');
+          console.log('LINEA_CON_CALLES',line.id,line.nombre,'STREETS',streets.length);
+          let crossing,street;
+          for(const e of streets.slice(0,2)){
+            const crosses=await get('/v1/intersecciones?linea='+encodeURIComponent(line.id)+'&calle='+encodeURIComponent(e.id));
+            if(crosses.length){street=e;crossing=crosses[0];break;}
+          }
+          if(!crossing)throw Error('No se recibieron intersecciones');
+          console.log('PRIMER_CRUCE',street.id,crossing.id);
+          const stops=await get('/v1/paradas?linea='+encodeURIComponent(line.id)+'&calle='+encodeURIComponent(street.id)+'&interseccion='+encodeURIComponent(crossing.id));
+          if(!stops.length)throw Error('No se recibieron paradas');
+          const stop=stops[0];
+          console.log('PARADA_REAL_ID',stop.identificador||stop.id);
+          const arrivals=await get('/v1/arribos?linea='+encodeURIComponent(line.id)+'&parada='+encodeURIComponent(stop.identificador||stop.id));
+          console.log('ARRIBOS_REALES',arrivals.length,arrivals.slice(0,3).map(x=>x.arribo||'<sin tiempo>'));
+          JS
