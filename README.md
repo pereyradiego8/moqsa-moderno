@@ -37,3 +37,11 @@
 **Conectar transporte.** Obtener del proveedor un endpoint SOAP vigente y credenciales **nuevas** y autorizadas. Configurarlas en el servidor (`BackendSoap/.env.example` como modelo) y exponer el puente mediante HTTPS (véase `Caddyfile.example`). Abrir Ajustes en Android y escribir URL base del backend. Validar en teléfono real que `lineas`, `calles`, `intersecciones`, `paradas`, `arribos`, `cercanas` y `recorrido` regresen datos correctos.
 
 El paquete `ar.com.cuandollega.moderno` permite instalar en paralelo sin sobreescribir el viejo. Antes de reemplazarlo, ejecutar pruebas de campo, verificar la licencia de datos y el uso de teselas, dar de alta firma de producción y auditar permisos.
+
+## Compatibilidad con consultas del proveedor (2.2.0-beta3)
+
+La pestaña **Llegadas** integra la web pública de SmartMovePro en un WebView seguro con JavaScript y almacenamiento DOM habilitados, navegación interna, recarga, ubicación previa autorización y salida al navegador. URL: https://cuandollega.smartmovepro.net/moqsa
+
+Esta integración **no reutiliza credenciales del APK original** ni alimenta el buscador nativo con respuestas de SmartMovePro. Las estimaciones se muestran únicamente mediante la página publicada por el propio proveedor, si sigue operativa.
+
+La conexión HTTPS a nuestro backend JSON continúa disponible en Ajustes. Sin acceso SOAP autorizado, ese backend no devuelve arribos.

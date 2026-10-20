@@ -27,7 +27,7 @@ public final class MainActivity extends Activity {
     private final Handler ui=new Handler(Looper.getMainLooper());
     private final Deque<State> history=new ArrayDeque<>();
     private ApiClient api;private Favorites favorites;private LinearLayout root,body;private State state=new State("home");
-    private int generation=0;private MapPanel mapPanel;private EditText searchField;private TextView reportPhotoLabel;private double lastMapLat=-34.75,lastMapLon=-58.25;private String errorMessage="";private android.net.Uri reportPhoto=null;
+    private int generation=0;private MapPanel mapPanel;private OfficialPortal officialPortal;private EditText searchField;private TextView reportPhotoLabel;private double lastMapLat=-34.75,lastMapLon=-58.25;private String errorMessage="";private android.net.Uri reportPhoto=null;
     private static final class State implements java.io.Serializable {
         String page, line="",lineName="",street="",streetName="",cross="",crossName="",stop="",stopName="",search=""; double mapLat=Double.NaN,mapLon=Double.NaN;
         State(String page){this.page=page;}
@@ -47,7 +47,7 @@ public final class MainActivity extends Activity {
         render();
     }
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putSerializable("current",state);out.putSerializable("history",new java.util.ArrayList<>(history));if(reportPhoto!=null)out.putString("photo",reportPhoto.toString());}
-    @Override protected void onDestroy(){generation++;pool.shutdownNow();if(mapPanel!=null){mapPanel.destroy();mapPanel=null;}super.onDestroy();}
+    @Override protected void onDestroy(){generation++;pool.shutdownNow();if(mapPanel!=null){mapPanel.destroy();mapPanel=null;}if(officialPortal!=null){officialPortal.destroy();officialPortal=null;}super.onDestroy();}
     @Override protected void onResume(){super.onResume();if(root!=null && "arrivals".equals(state.page))render();}
     private int dp(float v){return (int)(getResources().getDisplayMetrics().density*v+.5f);}
     private GradientDrawable shape(int color,int radius){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(dp(radius));return g;}
@@ -68,7 +68,7 @@ public final class MainActivity extends Activity {
     private void home(){history.clear();state=new State("home");hideKeyboard();render();}
     private void hideKeyboard(){try{((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(root.getWindowToken(),0);}catch(Exception ignored){}}
     @Override public void onBackPressed(){handleBack();}
-    private void handleBack(){if(!history.isEmpty()){state=history.pop();render();}else finish();}
+    private void handleBack(){if("official".equals(state.page)&&officialPortal!=null&&officialPortal.canGoBack()){officialPortal.goBack();return;}if(!history.isEmpty()){state=history.pop();render();}else finish();}
     private void header(){
         LinearLayout bar=row();bar.setPadding(dp(12),dp(10),dp(12),dp(10));bar.setBackgroundColor(DEEP);
         if(!history.isEmpty()){
@@ -82,18 +82,19 @@ public final class MainActivity extends Activity {
     }
     private String headerTitle(){switch(state.page){
         case "lines":return "Elegí una línea";case "routes":return "Recorridos";case "routeview":return "Mapa de recorrido";case "streets":return "Buscá por calle";case "crosses":return "Seleccioná intersección";case "stops":return "Elegí una parada";case "arrivals":return "Próximos arribos";
-        case "pointmap":return "Ubicación en el mapa";case "map":return "Mapa de paradas";case "nearby":return "Paradas cercanas";case "favorites":return "Tus favoritos";case "recharges":return "Puntos de recarga";case "manual":return "Consulta por código";case "settings":return "Configuración";case "directions":return "Cómo llego";case "reports":return "Enviar un reclamo";default:return "MOQSA · Transporte";
+        case "official":return "Llegadas · SmartMovePro";case "pointmap":return "Ubicación en el mapa";case "map":return "Mapa de paradas";case "nearby":return "Paradas cercanas";case "favorites":return "Tus favoritos";case "recharges":return "Puntos de recarga";case "manual":return "Consulta por código";case "settings":return "Configuración";case "directions":return "Cómo llego";case "reports":return "Enviar un reclamo";default:return "MOQSA · Transporte";
     }}
     private void render(){
         generation++;searchField=null;reportPhotoLabel=null;
         if(mapPanel!=null){try{if(mapPanel.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)mapPanel.getParent()).removeView(mapPanel);mapPanel.destroy();}catch(Exception ignored){}mapPanel=null;}
+        if(officialPortal!=null){try{if(officialPortal.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)officialPortal.getParent()).removeView(officialPortal);officialPortal.destroy();}catch(Exception ignored){}officialPortal=null;}
         root=col();root.setBackgroundColor(BG);
         if(Build.VERSION.SDK_INT>=35)root.setOnApplyWindowInsetsListener((view,insets)->{android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());view.setPadding(0,bars.top,0,bars.bottom);return insets;});
         setContentView(root);header();
         switch(state.page){
             case "home":renderHome();break;case "settings":renderSettings();break;
             case "lines":case "routes":case "streets":case "crosses":case "stops":case "nearby":case "favorites":case "recharges":renderList();break;
-            case "map":renderMap();break;case "pointmap":renderPointMap();break;case "manual":renderManual();break;case "arrivals":renderArrivals();break;case "routeview":renderRoute();break;
+            case "official":renderOfficialPortal();break;case "map":renderMap();break;case "pointmap":renderPointMap();break;case "manual":renderManual();break;case "arrivals":renderArrivals();break;case "routeview":renderRoute();break;
             case "directions":renderDirections();break;case "reports":renderReports();break;
             default:renderHome();
         }
@@ -101,7 +102,7 @@ public final class MainActivity extends Activity {
     }
     private void bottomNavigation(){
         LinearLayout bar=row();bar.setBackgroundColor(Color.WHITE);bar.setPadding(dp(5),dp(7),dp(5),dp(7));
-        addTab(bar,"⌂", "Inicio", "home");addTab(bar,"◎", "Mapa", "map");addTab(bar,"★", "Favoritos", "favorites");addTab(bar,"⌕", "Buscar", "lines");
+        addTab(bar,"⌂", "Inicio", "home");addTab(bar,"◷", "Llegadas", "official");addTab(bar,"◎", "Mapa", "map");addTab(bar,"★", "Favoritos", "favorites");addTab(bar,"⌕", "Buscar", "lines");
         root.addView(bar,lp(-1,64));
     }
     private void addTab(LinearLayout bar,String glyph,String label,String target){
@@ -117,9 +118,10 @@ public final class MainActivity extends Activity {
         TextView pill=text("●  TRANSPORTE EN TIEMPO REAL",11,Color.rgb(196,239,215),true);hero.addView(pill);space(hero,14);
         TextView title=text("Tu colectivo,\nmás cerca.",28,Color.WHITE,true);title.setLineSpacing(dp(2),1);hero.addView(title);space(hero,9);
         TextView desc=text("Encontrá tu parada y consultá los próximos arribos.",15,Color.rgb(218,242,228),false);hero.addView(desc);space(hero,16);
-        Button cta=button("Buscar por línea y calle  →",false,()->show("lines"));hero.addView(cta,lp(-1,54));
+        Button cta=button("Consultar llegadas de MOQSA  →",false,()->show("official"));hero.addView(cta,lp(-1,54));
         space(body,10);body.addView(text("Accesos rápidos",18,INK,true));space(body,12);
-        feature("⌕","Buscar parada por código","Con el número de parada y línea",()->show("manual"));
+        feature("◷","Próximos arribos de MOQSA","Sitio público de consultas de SmartMovePro",()->show("official"));
+        feature("⌕","Buscar parada por código","Con nuestro backend, cuando esté habilitado",()->show("manual"));
         feature("◉","Mapa interactivo de paradas","Calles, mapa y paradas cerca tuyo",()->show("map"));
         feature("◎","Paradas cerca tuyo","Ubicación precisa, solo si la permitís",()->show("nearby"));
         feature("★","Mis paradas favoritas","Guardá tus consultas frecuentes",()->show("favorites"));
@@ -127,6 +129,8 @@ public final class MainActivity extends Activity {
         feature("≋","Recorridos por línea","Consultá el trazado que informa el servicio",()->show("routes"));
         feature("▣","Puntos de recarga","Consultá los puntos cercanos",()->show("recharges"));
         feature("✉","Reclamos y sugerencias","Prepará un mensaje desde tu correo",()->show("reports"));
+        LinearLayout source=card(body);source.addView(text("Información de llegadas",16,INK,true));space(source,6);
+        source.addView(para("La pestaña Llegadas abre el sitio público de SmartMovePro. El buscador nativo por calle sigue necesitando acceso a una API autorizada."));
         if(!api.ready()){
             LinearLayout c=card(body);c.addView(text("Configuración pendiente",16,INK,true));space(c,6);c.addView(para("Para obtener horarios reales en esta nueva versión, hace falta conectar un servidor autorizado. No se muestran estimaciones inventadas."));space(c,10);c.addView(button("Configurar servidor seguro",false,()->show("settings")),lp(-1,48));
         }
@@ -138,6 +142,22 @@ public final class MainActivity extends Activity {
         LinearLayout texts=col();LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.leftMargin=dp(14);r.addView(texts,p);texts.addView(text(title,15,INK,true));space(texts,3);texts.addView(para(sub));
         r.addView(text("›",27,MUTED,false));r.setOnClickListener(v->action.run());
         LinearLayout.LayoutParams outer=lp(-1,-2);outer.bottomMargin=dp(10);body.addView(r,outer);
+    }
+    private void renderOfficialPortal(){
+        LinearLayout actions=row();actions.setPadding(dp(8),dp(5),dp(8),dp(5));
+        Button routes=button("Recorridos",false,()->{if(officialPortal!=null)officialPortal.goToSection("recorridos");});
+        Button stops=button("Cercanas",false,()->{if(officialPortal!=null)officialPortal.goToSection("paradascercanas");});
+        Button refresh=button("Recargar",false,()->{if(officialPortal!=null)officialPortal.reload();});
+        for(Button b:new Button[]{routes,stops,refresh}){b.setTextSize(12);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(43),1);p.leftMargin=dp(3);p.rightMargin=dp(3);actions.addView(b,p);}
+        root.addView(actions,lp(-1,54));
+        officialPortal=new OfficialPortal(this);
+        root.addView(officialPortal,new LinearLayout.LayoutParams(-1,0,1f));
+        LinearLayout info=row();info.setPadding(dp(11),dp(3),dp(11),dp(3));
+        TextView note=para("Fuente externa: SmartMovePro · Arribos según proveedor.");
+        info.addView(note,new LinearLayout.LayoutParams(0,-2,1f));
+        TextView external=text("Abrir ↗",13,GREEN,true);
+        info.addView(external);external.setOnClickListener(v->{if(officialPortal!=null)officialPortal.openInBrowser();});
+        root.addView(info,lp(-1,42));
     }
     private void renderSettings(){scrollBody();label(body,"Conexión segura","Esta app no contiene contraseñas del servicio SOAP. Usa un puente HTTPS configurado por el administrador.");
         LinearLayout c=card(body);c.addView(text("Dirección del servidor HTTPS",15,INK,true));space(c,11);
@@ -425,7 +445,7 @@ public final class MainActivity extends Activity {
         if(!fine&&!coarse){status.setText("Permití la ubicación para obtener paradas cercanas; el mapa se puede explorar sin ella.");requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},REQ_LOCATION);return;}
         locate(status);
     }
-    @Override public void onRequestPermissionsResult(int req,String[] permissions,int[] results){super.onRequestPermissionsResult(req,permissions,results);if(req==REQ_LOCATION){if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED||checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED){pending=null;render();}else{pending=null;Toast.makeText(this,"Ubicación no autorizada. Podés usar la búsqueda por línea y calle.",Toast.LENGTH_LONG).show();}}}
+    @Override public void onRequestPermissionsResult(int req,String[] permissions,int[] results){super.onRequestPermissionsResult(req,permissions,results);if(req==OfficialPortal.LOCATION_PERMISSION_REQUEST){if(officialPortal!=null)officialPortal.locationPermissionResult();return;}if(req==REQ_LOCATION){if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED||checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED){pending=null;render();}else{pending=null;Toast.makeText(this,"Ubicación no autorizada. Podés usar la búsqueda por línea y calle.",Toast.LENGTH_LONG).show();}}}
     @SuppressWarnings("MissingPermission")
     private void locate(TextView status){
         try{
