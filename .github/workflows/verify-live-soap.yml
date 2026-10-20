@@ -19,7 +19,7 @@ jobs:
           API_URL: https://moqsa-moderno-api.vercel.app
         run: |
           node --input-type=module <<'JS'
-          for (const path of ['/health','/v1/lineas']) {
+          for (const path of ['/health','/v1/lineas','/v1/calles?linea=300']) {
             try {
               const controller=new AbortController();
               const timer=setTimeout(()=>controller.abort(),18000);
