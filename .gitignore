@@ -1,8 +1,0 @@
-*.apk
-*.aab
-*.jks
-*.keystore
-.env
-AndroidModerno/.gradle/
-AndroidModerno/build/
-AndroidModerno/app/build/
