@@ -17,6 +17,7 @@ import java.util.concurrent.Executors
 /** Interfaz V3 empaquetada, cliente HTTPS separado del backend SOAP. */
 class MainActivity : Activity() {
     private lateinit var web: WebView
+    private val backendDefault = "https://moqsa-moderno-api.vercel.app"
     private val executor = Executors.newSingleThreadExecutor()
     private val preferences by lazy { getSharedPreferences("moqsa_backend", MODE_PRIVATE) }
 
@@ -52,7 +53,7 @@ class MainActivity : Activity() {
                 val response = try {
                     val args = JSONObject(parameters)
                     val value = when(action) {
-                        "config.get" -> JSONObject().put("baseUrl", preferences.getString("baseUrl", "") ?: "")
+                        "config.get" -> JSONObject().put("baseUrl", preferences.getString("baseUrl", backendDefault) ?: backendDefault)
                         "config.set" -> {
                             val base = args.optString("baseUrl").trim().trimEnd('/')
                             val uri = Uri.parse(base)
@@ -79,7 +80,7 @@ class MainActivity : Activity() {
     }
 
     private fun request(action: String, args: JSONObject): JSONObject {
-        val base = preferences.getString("baseUrl", "")?.trimEnd('/') ?: ""
+        val base = preferences.getString("baseUrl", backendDefault)?.trimEnd('/') ?: backendDefault
         if (!base.startsWith("https://")) throw IllegalStateException("Configurá un backend HTTPS en Ajustes")
         val path = when(action) {
             "health" -> "/health"
