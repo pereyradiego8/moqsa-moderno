@@ -1,5 +1,5 @@
 name: Verificar backend SOAP real
-# Test de entidad de la empresa
+# Test de entidad MOQSA
 on:
   workflow_dispatch:
   push:
