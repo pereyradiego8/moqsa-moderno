@@ -15,7 +15,7 @@ jobs:
           node-version: '22'
       - name: Consultar health y líneas reales de MOQSA
         env:
-          API_URL: https://moqsa-moderno-api-diegopereyra1.vercel.app
+          API_URL: https://moqsa-moderno-api.vercel.app
         run: |
           node --input-type=module <<'JS'
           for (const path of ['/health','/v1/lineas']) {
