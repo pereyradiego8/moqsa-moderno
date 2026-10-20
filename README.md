@@ -12,10 +12,16 @@ Este proyecto **no oficial** conserva el diseño HTML V3 y lo ejecuta como una i
 2. Si la compilación pasa, descargar el artefacto `moqsa-moderno-v3-debug` con el archivo APK.
 3. Alternativa: abrir la raíz en Android Studio con Java 17, Gradle 8.9 y Android SDK 35.
 
+## Estado actual del backend original (20/10/2026)
+
+El proyecto **no utiliza el portal web de SmartMovePro**: se conecta directamente al WebService SOAP de la APK MOQSA 1.7 mediante HTTPS (`https://clswbsas.smartmovepro.net/ModuloParadas/SWParadas.asmx`). Verificado: WSDL HTTP 200 y respuestas autenticadas. La API del puente se despliega en `https://moqsa-moderno-api.vercel.app`; las claves del servicio se mantienen en variables privadas del servidor.
+
+**Pendiente crítico:** el campo `SOAP_ENTITY` ("número de entidad" de la configuración original) solo está almacenado en las preferencias de la instalación original, no se incluye en el APK descargado. Por eso no hay todavía líneas ni arribos confirmados. No improvisar códigos, ni comunicar que la app ya funciona con ETA real. Configurar ese número en el servidor al recuperarlo de la app original y comprobar `/v1/lineas` con resultados no vacíos antes de validar Android.
+
 ## Conectar datos reales
 1. Desplegar `backend/` en un servidor HTTPS (por ejemplo Vercel, Root Directory = `backend`).
 2. Establecer SOLO en el servidor variables `SOAP_ENDPOINT`, `SOAP_USER`, `SOAP_PASSWORD`, `SOAP_ENTITY`, `SOAP_APP_CODE` y otras que correspondan según `backend/.env.example`. Usar exclusivamente acceso autorizado.
-3. En la aplicación, ir a **Más → Configuración** e indicar la URL HTTPS pública de la API JSON (sin `/v1`).
+3. La app Android utiliza por defecto la URL HTTPS del puente anterior; en **Más → Configuración** se puede cambiar si se migra el servidor.
 4. Consultar Líneas y comparar con el cliente anterior; repetir hasta comprobar arribos reales.
 
 **El backend no queda configurado automáticamente.** Sin credenciales y servidor autorizados, las pantallas informan el error en vez de inventar horarios. El proyecto anterior contenía un puente SOAP JSON útil que se migró y mantiene pruebas.
