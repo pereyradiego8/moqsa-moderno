@@ -19,13 +19,7 @@ jobs:
             echo "PROBE ${scheme}"
             curl -sS -L --max-time 15 -o /tmp/response-soap.txt -w 'HTTP_CODE=%{http_code} IP=%{remote_ip} SIZE=%{size_download} FINAL=%{url_effective}\n' "${scheme}://clswbsas.smartmovepro.net/ModuloParadas/SWParadas.asmx?WSDL"
             if [ "$scheme" = https ]; then
-              python3 - <<'PY'
-import re
-s=open('/tmp/response-soap.txt').read()
-for key in ['codigoEntidadSMP','codigoAplicacion','codigoLineaParada','usuario','clave']:
-  matches=re.findall(r'<(?:s:)?element[^>]*?name="'+re.escape(key)+r'"[^>]*>',s,re.I)
-  print('SCHEMA',key,' | '.join(matches[:2])[:350])
-PY
+              grep -oE '<s:element name="(codigoEntidadSMP|codigoAplicacion|codigoLineaParada|usuario|clave)"[^>]*>' /tmp/response-soap.txt | head -n 12
             fi
             echo
           done
