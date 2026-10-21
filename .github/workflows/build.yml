@@ -30,6 +30,8 @@ jobs:
         run: node scripts/check-ux.mjs
       - name: Validar ficha Cerca sin selección de línea
         run: node scripts/check-nearby-stop.mjs
+      - name: Validar otras líneas sin duplicar la seleccionada
+        run: node scripts/check-other-lines.mjs
       - name: Validar historial de navegación
         run: node scripts/check-navigation.mjs
       - uses: actions/setup-java@v4
