@@ -25,8 +25,8 @@ assert.ok(!section('function mainV3(){','function linesV3(){').includes("quickCa
 assert.ok(source.includes('parada:identifier}'), 'Arrivals send only validated identifiers');
 assert.ok(!source.includes('parada:dataV3.stop.identificador||dataV3.stop.id'));
 assert.ok(!source.includes("linea:'77',parada:'MO-01080'"),'Do not compare different routes');
-assert.ok(source.includes('function diagnosticPanel()'),'On-device diagnostic compares selected route');
-assert.ok(source.includes('Código de registro')&&source.includes('Identificador de llegadas'));
+assert.ok(!source.includes('Diagnóstico de esta parada'));
+assert.ok(!source.includes('Código de registro'));
 assert.ok(soap.includes('val codigoInterno = str(obj,"Codigo","CodigoParada")'));
 assert.ok(soap.includes('val identificadorOriginal = str(obj,"Identificador","IdentificadorParada")'));
 assert.ok(!soap.includes('str(obj,"Identificador","IdentificadorParada","Codigo")'));
