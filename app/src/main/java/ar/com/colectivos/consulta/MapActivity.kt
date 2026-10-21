@@ -2,6 +2,11 @@ package ar.com.colectivos.consulta
 
 import android.app.Activity
 import android.graphics.Color
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
@@ -21,6 +26,41 @@ import org.osmdroid.views.overlay.Polyline
 /** Mapa interactivo real: los puntos llegan del WebService original, nunca son simulados. */
 class MapActivity : Activity() {
     private lateinit var map: MapView
+    private fun markerIcon(type: String): BitmapDrawable {
+        val density = resources.displayMetrics.density
+        val width = (54 * density).toInt().coerceAtLeast(54)
+        val height = (65 * density).toInt().coerceAtLeast(65)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val x = width / 2f
+        val radius = width * 0.35f
+        val y = radius + 4 * density
+        val fill = when(type) {
+            "bus" -> Color.rgb(25, 95, 199)  // Colectivo, azul.
+            "user" -> Color.rgb(231, 121, 32) // Mi posición, naranja.
+            "route" -> Color.rgb(95, 81, 172)
+            else -> Color.rgb(0, 126, 94)    // Parada, verde.
+        }
+        val pin = Path().apply {
+            moveTo(x - radius * .55f, y + radius * .5f)
+            lineTo(x, height - 4 * density)
+            lineTo(x + radius * .55f, y + radius * .5f)
+            close()
+        }
+        canvas.drawPath(pin, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = fill })
+        canvas.drawCircle(x, y, radius + 2 * density, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE })
+        canvas.drawCircle(x, y, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = fill })
+        val label = when(type) { "bus" -> "C"; "user" -> "YO"; "route" -> "R"; else -> "P" }
+        canvas.drawText(label, x, y + 6 * density, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = if (label == "YO") 13 * density else 20 * density
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            textAlign = Paint.Align.CENTER
+        })
+        return BitmapDrawable(resources, bitmap)
+    }
+
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,6 +100,14 @@ class MapActivity : Activity() {
             controller.setZoom(14.0)
         }
         root.addView(map, LinearLayout.LayoutParams(-1, 0, 1f))
+        val legend = TextView(this).apply {
+            text = "🟢 P  Parada      🔵 C  Colectivo      🟠 YO  Tu ubicación"
+            textSize = 12f
+            setTextColor(Color.rgb(28, 62, 66))
+            setPadding(14, 12, 14, 10)
+            setBackgroundColor(Color.WHITE)
+        }
+        if (type != "route") root.addView(legend, LinearLayout.LayoutParams(-1, -2))
         val attribution = TextView(this).apply {
             text = "© OpenStreetMap contributors · Información de recorridos: servicio original MOQSA"
             textSize = 11f
@@ -85,9 +133,11 @@ class MapActivity : Activity() {
                     if (type == "route") if (i == 0) "Inicio del recorrido" else "Fin del recorrido"
                     else "Parada"
                 }
+                val iconType = if (type == "route") "route" else obj.optString("tipo", "stop")
                 map.overlays.add(Marker(map).apply {
                     position = pt
                     setTitle(label)
+                    setIcon(markerIcon(iconType))
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                 })
             }
