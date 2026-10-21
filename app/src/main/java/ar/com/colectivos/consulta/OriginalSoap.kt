@@ -117,8 +117,8 @@ class OriginalSoap(private val settings: DirectSettings) {
             factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
             factory.isXIncludeAware = false
             factory.isExpandEntityReferences = false
-            factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
-            factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
+            runCatching { factory.setAttribute("http://javax.xml.XMLConstants/property/accessExternalDTD", "") }
+            runCatching { factory.setAttribute("http://javax.xml.XMLConstants/property/accessExternalSchema", "") }
             val doc = factory.newDocumentBuilder().parse(ByteArrayInputStream(response.toByteArray()))
             if (doc.getElementsByTagNameNS("*", "Fault").length > 0)
                 throw IllegalStateException("El proveedor devolvió un error SOAP")
