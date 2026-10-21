@@ -23,7 +23,7 @@ assert.ok(html.includes("function openArrivalsMap()"));
 assert.ok(html.includes("function helpV3()"));
 assert.ok(html.includes("makers.help=helpV3"));
 assert.ok(html.includes("function loadRoute()"));
-assert.ok(css.includes(".arrival-eta strong")&&css.includes("font-size:clamp(24px,6vw,32px)"));
+assert.ok(css.includes(".eta-number")&&css.includes("grid-template-columns:minmax(0,126px) minmax(0,1fr)"));
 assert.ok(manifest.includes('.MapActivity')&&manifest.includes('android:exported="false"'));
 assert.ok(map.includes("setTileSource(TileSourceFactory.MAPNIK)"));
 assert.ok(map.includes("BoundingBox.fromGeoPoints(points)"));
