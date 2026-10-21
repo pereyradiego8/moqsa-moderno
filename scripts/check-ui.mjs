@@ -23,3 +23,11 @@ assert.ok(!native.includes('params["localidad"] = town'),'Regression: no per-str
 assert.ok(native.includes('message.contains("Parada inexistente"'),'Distinguish invalid stop from no buses');
 assert.ok(native.includes('"LineaBanderaYbanAmpliada"'));
 console.log('Passed: original SOAP city default, invalid stop error, stop heading and UI menu.');
+
+const activity=fs.readFileSync('app/src/main/java/ar/com/colectivos/consulta/MainActivity.kt','utf8');
+assert.ok(activity.includes('"diagnose.arrivals" ->'), 'Diagnóstico debe ir directamente al servidor SOAP');
+assert.ok(activity.includes('val sampleLine = "77"') && activity.includes('val sampleStop = "MO-01080"'),'Test de referencia históricamente válido');
+assert.ok(source.includes('function diagnosticPanel()') && source.includes('function diagnoseArrivals()'),'Diagnóstico UI disponible');
+assert.ok(source.includes('Comparar con una parada de referencia'),'Acción visible para la prueba');
+assert.ok(source.includes('diagnosticPanel();'),'Solo mostrar diagnóstico en llegada fallida');
+console.log('Passed: diagnóstico SOAP original con identificación de parada y ciudad sin credenciales.');
