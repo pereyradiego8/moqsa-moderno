@@ -91,8 +91,13 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        web.evaluateJavascript("(function(){if(typeof screen!=='undefined'&&screen!=='home'){go('home');return true;}return false;})()") { result ->
-            if (result != "true") super@MainActivity.onBackPressed()
+        // Una única navegación para tecla y gesto Atrás, igual que las flechas de la interfaz.
+        web.evaluateJavascript(
+            "(function(){return typeof window.moqsaGoBack === 'function' ? window.moqsaGoBack() : false;})()"
+        ) { handled ->
+            if (handled != "true" && !isFinishing && !isDestroyed) {
+                super@MainActivity.onBackPressed()
+            }
         }
     }
 
