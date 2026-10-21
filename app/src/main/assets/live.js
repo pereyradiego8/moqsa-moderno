@@ -53,7 +53,7 @@ function stopSubtitle(r){
  const id=stopIdentifier(r);
  const street=String(r.detalle||'').trim();
  const internal=String(r.codigoInterno||r.id||'').trim();
- return [street,id?'Parada '+id:internal?'Código interno '+internal+' · identificador no informado':'Identificador no informado'].filter(Boolean).join(' · ');
+ return street||'Consultar próximos arribos';
 }
 // Coordenadas exclusivas del SOAP original. Las teselas de OSM sólo son el fondo.
 function validGeoPoint(v,label,type='stop'){
@@ -82,9 +82,9 @@ function arrivalVehiclePoints(){
   (a.destino||'')+' · '+(a.arribo||''),'bus');
 }
 async function openMap(type,title,points){
- if(!points.length){toast('El servicio no informó coordenadas para este mapa');return;}
+ if(!points.length){toast('No hay ubicación disponible para este mapa');return;}
  try{await native('map.show',{type,title,points});}
- catch(e){toast('No se pudo abrir el mapa: '+String(e.message||'Error'));}
+ catch(e){toast('No pudimos abrir el mapa. Probá otra vez.');}
 }
 function openStopsMap(){
  const points=geoPoints(dataV3.stops,s=>stopHeading(s),'stop');
@@ -430,7 +430,7 @@ async function loadNearStopArrivals(){
  dataV3.nearStopArrivals=[];dataV3.nearStopError='';dataV3.nearStopMessage='';
  const ident=stopIdentifier(stop);
  if(!ident){
-  dataV3.nearStopError='El proveedor no informó el identificador necesario para consultar esta parada.';
+  dataV3.nearStopError='No hay información disponible para esta parada.';
   render();return;
  }
  dataV3.nearStopLoading=true;render();
@@ -443,7 +443,7 @@ async function loadNearStopArrivals(){
   dataV3.nearStopPartial=Boolean(response.parcial);
  }catch(e){
   if(requestId!==dataV3.nearStopRequestId)return;
-  dataV3.nearStopError=e.message||'Error consultando los arribos de esta parada';
+  dataV3.nearStopError='No pudimos actualizar las llegadas. Intentá nuevamente.';
  }
  if(requestId===dataV3.nearStopRequestId){dataV3.nearStopLoading=false;render();}
 }
@@ -510,16 +510,9 @@ function nearbyStopV3(){
  return out;
 }
 function settingsV3(){
- return intro('Ajustes','Estado y configuración de la aplicación.','AJUSTES')+
- '<div class="card"><div class="field"><label>Servidor original</label><p style="overflow-wrap:anywhere">clswbsas.smartmovepro.net · HTTPS</p></div>'+
- '<div class="field"><label>Entidad</label><p>4 (APK 1.7)</p></div>'+
- '<div class="field"><label>Aplicación</label><p>24 (APK 1.7)</p></div>'+
- '<p><strong>Estado:</strong> '+(dataV3.configured?'Acceso guardado en este teléfono':'Faltan credenciales del servidor original')+'</p>'+
- '<div class="field"><label for="soapUser">Usuario SOAP</label><input id="soapUser" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Usuario del servidor original"/></div>'+
- '<div class="field"><label for="soapPassword">Contraseña SOAP</label><input id="soapPassword" type="password" autocomplete="off" placeholder="Contraseña del servicio"/></div>'+
- '<button class="primary" onclick="saveApi()">'+I('check')+' Guardar credenciales</button></div>'+
- notice('La conexión está protegida en este dispositivo.')+
- '<button class="secondary" onclick="checkApi()">Probar consulta real</button>'+feedback();
+ return intro('Preferencias','Consultá tus colectivos de manera simple.','AJUSTES')+
+ '<div class="card"><h3>MOQSA</h3><p>Consultá líneas, paradas, recorridos y tus favoritos.</p></div>'+
+ '<button class="secondary" onclick="go(\'home\')">Volver al inicio</button>';
 }
 async function loadConfig(){
  try{const c=await native('config.get');dataV3.configured=Boolean(c.configured);if(screen==='settings')render();}
@@ -537,7 +530,7 @@ async function checkApi(){
  dataV3.loading=true;dataV3.error='';render();
  try{
   const res=await native('lines');
-  if(!Array.isArray(res.items)||!res.items.length)throw Error('No llegaron líneas del servicio original');
+  if(!Array.isArray(res.items)||!res.items.length)throw Error('No encontramos líneas en este momento');
   dataV3.lines=res.items;dataV3.loading=false;toast('Conectado: '+res.items.length+' líneas');go('lines');
  }catch(e){dataV3.loading=false;dataV3.error=e.message;render();}
 }
