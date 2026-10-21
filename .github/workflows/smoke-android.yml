@@ -25,6 +25,12 @@ jobs:
           gradle-version: '8.9'
       - name: Compilar
         run: gradle :app:assembleDebug --no-daemon
+      - name: Recrear parche DEX sin secretos
+        run: python scripts/patch_fake_creds.py app/build/outputs/apk/debug/app-debug.apk /tmp/moqsa-fake-unsigned.apk
+      - name: Firmar copia de prueba con apksigner
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$HOME/.android/debug.keystore" --ks-pass pass:android --key-pass pass:android --v2-signing-enabled true --v3-signing-enabled true --out /tmp/moqsa-fake.apk /tmp/moqsa-fake-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose /tmp/moqsa-fake.apk
       - name: Permisos de KVM
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
@@ -37,7 +43,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 600
           script: |
-            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb install -r /tmp/moqsa-fake.apk
             adb logcat -c
             adb shell am start -W -n ar.com.colectivos.consulta/.MainActivity
             sleep 8
@@ -47,4 +53,4 @@ jobs:
             echo "=== AndroidRuntime errors ==="
             adb logcat -d -s AndroidRuntime:E ActivityTaskManager:E ActivityManager:E dalvikvm:E
             test -s /tmp/moqsa.pid
-            echo 'APP SURVIVED LAUNCH'
+            echo 'APP SURVIVED LAUNCH WITH FAKE PRIVATE DEX'
