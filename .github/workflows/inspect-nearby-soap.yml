@@ -1,0 +1,33 @@
+name: Inspeccionar contrato SOAP de cercanía
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-nearby-soap.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Leer firma y tipos de la operación SOAP
+        run: |
+          python3 - <<'PY'
+          import requests,xml.etree.ElementTree as ET
+          url='https://clswbsas.smartmovepro.net/ModuloParadas/SWParadas.asmx?WSDL'
+          r=requests.get(url,timeout=20)
+          print('WSDL status:',r.status_code,'bytes:',len(r.content))
+          r.raise_for_status()
+          root=ET.fromstring(r.content)
+          ns={'s':'http://www.w3.org/2001/XMLSchema','wsdl':'http://schemas.xmlsoap.org/wsdl/'}
+          for op in root.findall('.//wsdl:operation',ns):
+              if 'Cercan' in op.attrib.get('name',''):
+                  print('OPERATION',op.attrib.get('name',''))
+          for elem in root.findall('.//s:element',ns):
+              name=elem.attrib.get('name','')
+              if 'Cercan' in name:
+                  print('SCHEMA ELEMENT',name)
+                  for child in elem.findall('.//s:element',ns):
+                      print('FIELD',child.attrib.get('name'), 'TYPE',child.attrib.get('type'))
+          PY
