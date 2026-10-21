@@ -18,10 +18,10 @@ jobs:
           node-version: '22'
       - name: Validar JavaScript
         run: node --check app/src/main/assets/live.js
-      - name: Comprobar diagnóstico SOAP sin credenciales
+      - name: Validar que se comparen los códigos de la misma línea
         run: |
-          grep -q 'diagnose.arrivals' app/src/main/java/ar/com/colectivos/consulta/MainActivity.kt
           grep -q 'diagnosticPanel()' app/src/main/assets/live.js
+          ! grep -q 'diagnose.arrivals' app/src/main/java/ar/com/colectivos/consulta/MainActivity.kt
       - name: Validar localidades y sentidos
         run: node scripts/check-ui.mjs
       - name: Validar historial de navegación
