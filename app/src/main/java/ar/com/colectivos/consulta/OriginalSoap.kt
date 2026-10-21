@@ -245,8 +245,15 @@ class OriginalSoap(private val settings: DirectSettings) {
                     normalized.put("nombre",str(obj,"Descripcion","nombre"))
                 }
                 "stops","nearby" -> {
-                    normalized.put("id",str(obj,"Codigo","CodigoParada","Identificador"))
-                    normalized.put("identificador",str(obj,"Identificador","IdentificadorParada","Codigo"))
+                    // ParadaJson de la APK 1.7 contiene campos independientes:
+                    // Codigo (registro interno) e Identificador (enviado a próximos arribos).
+                    // Nunca usar Codigo como fallback para Identificador.
+                    val codigoInterno = str(obj,"Codigo","CodigoParada")
+                    val identificadorOriginal = str(obj,"Identificador","IdentificadorParada")
+                    normalized.put("id",codigoInterno)
+                    normalized.put("codigoInterno",codigoInterno)
+                    normalized.put("identificador",identificadorOriginal)
+                    normalized.put("identificadorPresente",identificadorOriginal.isNotBlank())
                     normalized.put("nombre",str(obj,"Descripcion","DescripcionParada","CallePrincipal"))
                     val first = str(obj,"CallePrincipal","NombreCalle")
                     val second = str(obj,"CalleInterseccion","InterseccionCalle")
