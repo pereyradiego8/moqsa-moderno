@@ -62,7 +62,7 @@ assert.equal(dataV3.line.id,'99');
 call('chooseRouteLine(1)');
 assert.equal(ctx.root.scrollTop,0,'La selección vuelve arriba desde el final del catálogo');
 assert.equal(dataV3.routeLine.nombre,'619');
-assert.equal(dataV3.routeQuery,'');
+assert.equal(dataV3.routeQuery,'619','El filtro se conserva al volver del detalle');
 assert.equal(pending[0].action,'route');
 assert.equal(pending[0].params.linea,'2');
 assert.match(call('routesV3()'),/Recorrido · 619/);
