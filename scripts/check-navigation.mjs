@@ -56,7 +56,7 @@ assert.equal(back(),true);
 assert.equal(get(),'routes','El detalle pertenece a la misma pantalla');
 assert.equal(dataV3.routeLine,null);
 assert.equal(root.scrollTop,260,'El catálogo recuerda dónde se tocó la línea');
-assert.equal(vm.runInContext('navTrail.length',ctx),2,'No se consume una entrada al cerrar el detalle');
+assert.equal(vm.runInContext('navTrail.length',ctx),3,'No se consume una entrada al cerrar el detalle');
 assert.equal(back(),true);assert.equal(get(),'more');assert.equal(root.scrollTop,185);
 // Si otra pantalla se abre desde detalle, el Atrás debe restaurarlo.
 go('routes');
