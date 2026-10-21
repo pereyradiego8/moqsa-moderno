@@ -55,6 +55,41 @@ function stopSubtitle(r){
  const internal=String(r.codigoInterno||r.id||'').trim();
  return [street,id?'Parada '+id:internal?'Código interno '+internal+' · identificador no informado':'Identificador no informado'].filter(Boolean).join(' · ');
 }
+// Coordenadas provistas por SOAP: nunca completamos coordenadas aproximadas.
+function validGeoPoint(v,label){
+ const lat=Number(v?.lat),lon=Number(v?.lon);
+ if(v?.lat==null||v?.lon==null||!Number.isFinite(lat)||!Number.isFinite(lon)||
+    Math.abs(lat)>90||Math.abs(lon)>180||(lat===0&&lon===0))return null;
+ return {lat,lon,nombre:String(label||v?.nombre||'Parada').slice(0,95)};
+}
+function geoPoints(list,nameFn){
+ return (Array.isArray(list)?list:[]).map((v,i)=>validGeoPoint(v,nameFn?nameFn(v,i):'')).filter(Boolean).slice(0,1200);
+}
+async function openMap(type,title,points){
+ if(!points.length){toast('El servicio no informó coordenadas para este mapa');return;}
+ try{await native('map.show',{type,title,points});}
+ catch(e){toast('No se pudo abrir el mapa: '+String(e.message||'Error'));}
+}
+function openStopsMap(){
+ const points=geoPoints(dataV3.stops,s=>stopHeading(s));
+ openMap('stops','Paradas · '+String(dataV3.line?.nombre||''),points);
+}
+function openArrivalsMap(){
+ if(!dataV3.stop)return;
+ const stop=validGeoPoint(dataV3.stop,'Parada '+stopIdentifier(dataV3.stop));
+ const buses=geoPoints(dataV3.arrivals,a=>(a.linea||dataV3.line?.nombre||'Colectivo')+' · '+(a.arribo||''));
+ const points=[...(stop?[stop]:[]),...buses];
+ openMap('stops','Próximas llegadas · '+String(dataV3.line?.nombre||''),points);
+}
+function openRouteMap(){
+ const points=geoPoints(dataV3.route,(v,i)=>v.nombre||'Punto '+String(i+1));
+ openMap('route','Recorrido · '+String(dataV3.line?.nombre||''),points);
+}
+async function loadRoute(){
+ if(!dataV3.line)return;
+ dataV3.route=[];
+ await request('route',{linea:dataV3.line.id},'route');
+}
 function mainV3(){
  return '<div class="greeting"><div class="eyebrow">TU VIAJE, MÁS SIMPLE</div><h2>¿A dónde<br>vamos hoy?</h2><p>Encontrá el colectivo y su parada sin perder tiempo.</p></div>'+
  '<form class="search-bar" onsubmit="event.preventDefault();queryLine()">'+I('search')+'<input id="lineQuery" placeholder="Buscar línea" aria-label="Buscar por número o nombre"/><button type="submit" aria-label="Buscar">'+I('arrow')+'</button></form>'+
@@ -93,6 +128,8 @@ function stopsV3(){
  optionsV3(dataV3.streets,dataV3.street)+'</select></div>'+
  '<div class="field"><label for="crossing">Intersección</label><select id="crossing" onchange="chooseCrossing(this.value)"><option value="">Elegí una intersección</option>'+
  optionsV3(dataV3.crossings,dataV3.crossing)+'</select></div></div>';
+ if(geoPoints(dataV3.stops).length)out+='<button class="secondary map-action" onclick="openStopsMap()">'+I('pin')+' Ver paradas en mapa</button>';
+ out+='<button class="secondary map-action" onclick="go(\'routes\')">'+I('arrow')+' Ver recorrido de la línea</button>';
  out+=dataV3.stops.map((r,i)=>item(stopHeading(r),stopSubtitle(r),'chooseStop('+i+')','pin')).join('');
  return out+feedback()+(dataV3.crossing!==null&&!dataV3.stops.length&&!dataV3.loading&&!dataV3.error?empty('paradas'):'');
 }
@@ -143,10 +180,14 @@ function diagnosticPanel(){
 function arrivalsV3(){
  if(!dataV3.stop||!dataV3.line)return intro('Próximas llegadas','Elegí una parada primero.','ARRIBOS')+'<button class="primary" onclick="go(\'lines\')">Buscar línea</button>';
  let out=back('stops')+intro('Próximas llegadas',clean(dataV3.line.nombre||dataV3.line.id)+' · '+clean(stopHeading(dataV3.stop)),'DATOS REALES')+
- '<div class="card"><div class="cardhead"><h3>Próximos colectivos</h3><button class="favourite" onclick="toggleFavorite()" aria-label="Guardar esta parada">'+I('star')+'</button></div>';
- out+=dataV3.arrivals.length?dataV3.arrivals.map(a=>'<div class="arrival-entry">'+I('clock')+'<div><strong>'+clean(a.arribo||'Sin estimación')+'</strong><small>'+clean(a.linea||'')+' · '+clean(a.destino||'')+'</small></div></div>').join(''):
- (!dataV3.loading&&!dataV3.error?'<div class="screen-note"><strong>Sin arribos informados en este momento.</strong><p>'+clean(dataV3.mensaje||'No se recibieron predicciones para esta parada y sentido. Podés volver a consultar.')+'</p></div>':'');
- return out+'</div><button class="primary" onclick="loadArrivals()">'+I('refresh')+' Actualizar llegadas</button>'+feedback()+diagnosticPanel();
+ '<div class="card arrival-panel"><div class="cardhead"><h3>Próximos colectivos</h3><button class="favourite" onclick="toggleFavorite()" aria-label="Guardar esta parada">'+I('star')+'</button></div>';
+ out+=dataV3.arrivals.length
+ ? dataV3.arrivals.map((a,i)=>'<div class="arrival-highlight"><div class="arrival-eta"><span class="eta-kicker">'+(i===0?'PRÓXIMO COLECTIVO':'SIGUIENTE')+'</span><strong>'+clean(a.arribo||'Sin estimación')+'</strong></div><div class="arrival-details"><strong class="arrival-line">'+clean(a.linea||dataV3.line.nombre||'Colectivo')+'</strong><span class="arrival-destination">'+clean(a.destino||stopHeading(dataV3.stop))+'</span></div></div>').join('')
+ :(!dataV3.loading&&!dataV3.error?'<div class="screen-note"><strong>Sin estimaciones disponibles ahora.</strong><p>'+clean(dataV3.mensaje||'El servidor no envió tiempos para esta parada. Podés intentar de nuevo en unos minutos.')+'</p></div>':'');
+ out+='</div><button class="primary" onclick="loadArrivals()">'+I('refresh')+' Actualizar llegadas</button>';
+ if(validGeoPoint(dataV3.stop)||geoPoints(dataV3.arrivals).length)
+    out+='<button class="secondary map-action" onclick="openArrivalsMap()">'+I('pin')+' Ubicar parada y colectivos en mapa</button>';
+ return out+feedback()+diagnosticPanel();
 }
 function favoritesV3(){try{const a=JSON.parse(localStorage.getItem('moqsa_v3_favs')||'[]');return Array.isArray(a)?a.filter(x=>x&&x.line&&x.stop).slice(0,100):[];}catch(e){return [];}}
 function toggleFavorite(){
@@ -163,10 +204,19 @@ function favsV3(){
 }
 function openFavorite(i){const f=favoritesV3()[i];if(!f)return;dataV3.line=f.line;dataV3.stop=f.stop;dataV3.diagnostico=null;dataV3.arrivals=[];dataV3.error='';go('arrival');loadArrivals();}
 function routesV3(){
- if(!dataV3.line)return intro('Recorridos','Primero elegí una línea.','RECORRIDOS')+'<button class="primary" onclick="go(\'lines\')">Elegir línea</button>';
- return back('lines')+intro('Recorrido: '+clean(dataV3.line.nombre||dataV3.line.id),'Puntos recibidos del servicio.','RECORRIDOS')+
- '<button class="primary" onclick="request(\'route\',{linea:dataV3.line.id},\'route\')">'+I('refresh')+' Consultar recorrido</button>'+
- (dataV3.route.length?'<div class="card">'+dataV3.route.map(r=>'<div class="stop-item">'+clean(r.nombre||r.id||'Punto')+'</div>').join('')+'</div>':notice('El mapa real todavía está pendiente de integración.'))+feedback();
+ if(!dataV3.line)return intro('Recorridos','Elegí una línea para ver su trayecto sobre el mapa.','RECORRIDOS')+
+ '<button class="primary" onclick="go(\'lines\')">Elegir línea</button>'+
+ notice('Primero seleccioná una línea; después tocá “Ver recorrido de la línea” en Paradas.');
+ const coords=geoPoints(dataV3.route,(v,i)=>v.nombre||'Punto '+String(i+1));
+ let out=back('stops')+intro('Recorrido · '+clean(dataV3.line.nombre||dataV3.line.id),'Trayecto de la línea sobre OpenStreetMap.','MAPA DEL RECORRIDO')+
+ '<button class="primary" onclick="loadRoute()">'+I('refresh')+' Consultar recorrido real</button>';
+ if(coords.length){
+   out+='<div class="card"><h3>Recorrido disponible</h3><p>'+coords.length+' puntos geográficos recibidos del servidor de transporte.</p></div>'+
+   '<button class="secondary map-action" onclick="openRouteMap()">'+I('pin')+' Abrir recorrido en mapa interactivo</button>';
+ }else if(!dataV3.loading&&!dataV3.error){
+   out+=notice('Seleccioná “Consultar recorrido real”. El mapa se habilitará cuando el servicio original entregue coordenadas válidas.');
+ }
+ return out+feedback()+(dataV3.route.length&&!coords.length?notice('El servicio devolvió datos del recorrido, pero no coordenadas interpretables. No se dibuja una ruta ficticia.'):'');
 }
 function settingsV3(){
  return intro('Servidor original de MOQSA','Conexión HTTPS directa sin servicios intermedios.','CONEXIÓN SOAP')+
@@ -216,7 +266,26 @@ makers.voice=()=>pendingV3('Búsqueda por voz');makers.reload=()=>pendingV3('Pun
 makers.reports=()=>pendingV3('Consultas y reclamos');makers.news=()=>pendingV3('Novedades');
 makers.shortcuts=()=>pendingV3('Accesos directos');
 makers.about=()=>intro('MOQSA','Consulta de colectivos.','ACERCA DE')+notice('Cliente no oficial. Consulta directamente el servicio SOAP original por HTTPS, sin servidor intermedio.');
-makers.help=()=>intro('Cómo consultar','Elegí una línea, calle, intersección y parada para ver horarios.','AYUDA');
+function helpV3(){
+ const steps=[
+ ['01','Buscá tu línea','Entrá en Líneas y escribí el número (por ejemplo, 300). Elegí el ramal que uses.'],
+ ['02','Elegí la calle y el cruce','Seleccioná la calle principal y después su intersección. Estas opciones vienen del servicio de transporte.'],
+ ['03','Comprobá el sentido de la parada','Prestá atención al destino: “Hacia …” identifica el sentido del colectivo. El código MO-xxxxx es una referencia técnica.'],
+ ['04','Consultá el próximo arribo','El tiempo es una estimación del servidor y puede cambiar. Tocá Actualizar llegadas cuando quieras refrescar.'],
+ ['05','Guardá y ubicá tu parada','Tocá la estrella para agregarla a Guardados. Si se conocen las coordenadas, también podés ubicarla en el mapa.']
+ ];
+ return intro('Cómo consultar','Todo lo que necesitás para encontrar tu colectivo más rápido.','GUÍA DE VIAJE')+
+ '<div class="help-steps">'+steps.map(([n,title,description])=>
+ '<div class="help-step"><span class="help-number">'+n+'</span><div><strong>'+title+'</strong><p>'+description+'</p></div></div>').join('')+'</div>'+
+ '<div class="card help-tips"><h3>¿Cómo interpretar los tiempos?</h3>'+
+ '<p><strong>“5 min aprox.”</strong> indica que el colectivo podría llegar en unos cinco minutos; no es una garantía.</p>'+
+ '<p><strong>“Sin estimación”</strong> significa que el servidor no tiene una predicción disponible en ese momento.</p>'+
+ '<p><strong>“Error de consulta”</strong> significa que no pudimos obtener una respuesta válida; reintentá o volvé a seleccionar la parada.</p></div>'+
+ '<div class="card help-tips"><h3>Mapas y recorridos</h3><p>Podés abrir el mapa del recorrido desde Paradas → Ver recorrido de la línea. El mapa utiliza OpenStreetMap y solo dibuja coordenadas reales recibidas del servicio.</p></div>'+
+ '<button class="primary" onclick="go(\'lines\')">'+I('bus')+' Empezar una consulta</button>'+
+ '<button class="secondary" onclick="go(\'fav\')">'+I('star')+' Abrir mis paradas guardadas</button>';
+}
+makers.help=helpV3;
 const oldGo=go;
 const navTrail=[];
 const MAX_NAV_TRAIL=60;
