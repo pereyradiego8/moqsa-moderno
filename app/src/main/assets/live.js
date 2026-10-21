@@ -33,6 +33,22 @@ async function request(action,params,field){
  }catch(e){dataV3.loading=false;dataV3.mensaje='';dataV3.error=e.message||'Error de conexión';render();}
 }
 function retryScreen(){if(screen==='arrival')loadArrivals();else if(screen==='lines')loadLines();else if(screen==='stops'&&dataV3.line)request('streets',{linea:dataV3.line.id},'streets');}
+function localityFromLabel(label){
+ const parts=String(label||'').split(/\s+-\s+/);
+ if(parts.length<2)return '';
+ const town=parts[parts.length-1].trim().toLocaleUpperCase('es-AR');
+ return /^[A-ZÁÉÍÓÚÜÑ ]{3,60}$/.test(town)?town:'';
+}
+function stopLocality(){
+ const sources=[dataV3.stop?.localidad,dataV3.street!==null?dataV3.streets[Number(dataV3.street)]?.nombre:'',dataV3.crossing!==null?dataV3.crossings[Number(dataV3.crossing)]?.nombre:'',dataV3.stop?.detalle,dataV3.stop?.nombre];
+ for(const s of sources){
+  if(!s)continue;
+  const town=localityFromLabel(s);
+  if(town)return town;
+  if(typeof s==='string' && /^[A-ZÁÉÍÓÚÜÑ ]{3,60}$/.test(s.trim().toLocaleUpperCase('es-AR'))&&!/CALLE|AVENIDA|AV\.|RUTA/i.test(s))return s.trim().toLocaleUpperCase('es-AR');
+ }
+ return '';
+}
 function stopHeading(r){
  const direction=String(r.sentido||r.bandera||'').trim();
  const desc=String(r.nombre||'').trim();
@@ -99,12 +115,14 @@ function chooseCrossing(i){
 }
 function chooseStop(i){
  const stop=dataV3.stops[i];if(!stop)return;
- dataV3.stop=stop;dataV3.arrivals=[];dataV3.arrivalsChecked=false;dataV3.mensaje='';go('arrival');loadArrivals();
+ dataV3.stop=stop;dataV3.stop.localidad=stopLocality();dataV3.arrivals=[];dataV3.arrivalsChecked=false;dataV3.mensaje='';go('arrival');loadArrivals();
 }
 async function loadArrivals(){
  if(!dataV3.line||!dataV3.stop)return;
  dataV3.arrivalsChecked=false;dataV3.mensaje='';dataV3.arrivals=[];render();
- await request('arrivals',{linea:dataV3.line.id,parada:dataV3.stop.identificador||dataV3.stop.id},'arrivals');
+ const localidad=stopLocality();
+ if(!localidad){dataV3.error='No pude identificar la localidad para consultar este arribo. Volvé a elegir calle e intersección.';render();return;}
+ await request('arrivals',{linea:dataV3.line.id,parada:dataV3.stop.identificador||dataV3.stop.id,localidad},'arrivals');
  dataV3.arrivalsChecked=!dataV3.error;
 }
 function arrivalsV3(){
@@ -121,14 +139,14 @@ function toggleFavorite(){
  const key=dataV3.line.id+'|'+(dataV3.stop.identificador||dataV3.stop.id);
  let rows=favoritesV3(),idx=rows.findIndex(x=>x.key===key);
  if(idx>=0){rows.splice(idx,1);toast('Eliminada de favoritos');}
- else{rows.unshift({key,line:dataV3.line,stop:dataV3.stop});toast('Guardada en favoritos');}
+ else{rows.unshift({key,line:dataV3.line,stop:{...dataV3.stop,localidad:stopLocality()}});toast('Guardada en favoritos');}
  localStorage.setItem('moqsa_v3_favs',JSON.stringify(rows));render();
 }
 function favsV3(){
  const favs=favoritesV3();return intro('Tus favoritos','Acceso rápido a tus paradas guardadas.','GUARDADOS')+
  (favs.length?favs.map((f,i)=>item(f.line.nombre||f.line.id,stopHeading(f.stop),'openFavorite('+i+')','star')).join(''):empty('favoritos'));
 }
-function openFavorite(i){const f=favoritesV3()[i];if(!f)return;dataV3.line=f.line;dataV3.stop=f.stop;go('arrival');loadArrivals();}
+function openFavorite(i){const f=favoritesV3()[i];if(!f)return;dataV3.line=f.line;dataV3.stop=f.stop;dataV3.arrivals=[];dataV3.error='';go('arrival');loadArrivals();}
 function routesV3(){
  if(!dataV3.line)return intro('Recorridos','Primero elegí una línea.','RECORRIDOS')+'<button class="primary" onclick="go(\'lines\')">Elegir línea</button>';
  return back('lines')+intro('Recorrido: '+clean(dataV3.line.nombre||dataV3.line.id),'Puntos recibidos del servicio.','RECORRIDOS')+
