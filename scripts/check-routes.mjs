@@ -31,7 +31,7 @@ const ctx=vm.createContext({
 });
 vm.runInContext(
  section('function validGeoPoint(','function currentStopPoint(')+
- section('function routeLabelFromService(','function mainV3(){')+
+ section('function routeMeters(','function mainV3(){')+
  section('function routeLineChoices(){','function metersBetween('),ctx);
 const call=expr=>vm.runInContext(expr,ctx);
 assert.match(call('routesV3()'),/Todas las líneas/);
@@ -70,29 +70,47 @@ assert.equal(dataV3.line.id,'99');
 // El selector también aparece con una sola variante real.
 dataV3.route=[{nombre:'ÚNICO;Hacia Bernal',lat:-34.7,lon:-58.2}];
 assert.equal(call('routeVariants().length'),1);
-assert.equal(call('routeVariants()[0].label'),'Hacia Bernal');
+assert.equal(call('routeVariants()[0].label'),'Recorrido completo');
 assert.match(call('routesV3()'),/chooseRouteVariant\(0\)/);
-assert.match(call('routesV3()'),/Este es el recorrido disponible/);
+assert.match(call('routesV3()'),/solo permite identificar un trazado/);
 // No inventar ramales cuando el servidor entrega nombres por vértice.
 dataV3.route=Array.from({length:15},(_,i)=>({
  nombre:'Punto '+(i+1),lat:-34.7+i*.0001,lon:-58.2+i*.0001
 }));
 assert.equal(call('routeVariants().length'),1);
-assert.equal(call('routeVariants()[0].label'),'Recorrido disponible');
+assert.equal(call('routeVariants()[0].label'),'Recorrido completo');
 
-// Un recorrido con ramales independientes no debe unir las geometrías.
-dataV3.route=[
- {nombre:'R1;Ida',lat:-34.75,lon:-58.2},
- {nombre:'R1;Ida',lat:-34.74,lon:-58.19},
- {nombre:'R2;Vuelta',lat:-34.73,lon:-58.18},
- {nombre:'R2;Vuelta',lat:-34.72,lon:-58.17}
-];
-assert.equal(call('routeVariants().length'),2);
-assert.match(call('routesV3()'),/Elegí el ramal/);
+// Variantes reales: dos sentidos largos y ramales intermedios no deben
+// convertirse en 10 recorridos distintos. Se elige un trayecto por sentido.
+dataV3.route=[];
+for(const [name,from,to,count] of [
+ ['CAPITAL;Est.Bernal-C.Central',-34.8,-34.76,80],
+ ['BERNAL;C.Central-Est.Bernal',-34.76,-34.8,65],
+ ['INTERMEDIO;Capital-Bern al',-34.78,-34.77,5],
+ ['REFUERZO;A Capital',-34.8,-34.785,10],
+ ['INTERMEDIO 2',-34.79,-34.783,4],
+ ['REFUERZO VUELTA',-34.775,-34.79,6]
+]){
+ for(let i=0;i<count;i++){
+  const t=i/(count-1);
+  dataV3.route.push({nombre:name,lat:from+(to-from)*t,lon:-58.25});
+ }
+}
+assert.equal(call('routeVariants().length'),2,'Solo Ida y Vuelta, nunca ramales intermedios');
+assert.equal(call('routeVariants()[0].label'),'Ida');
+assert.equal(call('routeVariants()[1].label'),'Vuelta');
+assert.match(call('routesV3()'),/Elegí Ida o Vuelta/);
+assert.ok(!call('routesV3()').includes('puntos geográficos'),'No exponer vértices como recorridos');
 call('chooseRouteVariant(1)');
 const onlyVuelta=call('routeMapPoints()');
-assert.equal(onlyVuelta.length,2);
-assert.equal(onlyVuelta[0].lat,-34.73);
+assert.equal(onlyVuelta[0].lat,-34.76);
+assert.ok(Math.abs(onlyVuelta.at(-1).lat-(-34.8))<1e-7);
+// Dos recorridos con el mismo rumbo NO constituyen una vuelta.
+dataV3.route=[
+ ...Array.from({length:10},(_,i)=>({nombre:'Uno',lat:-34.8+i*.001,lon:-58.2})),
+ ...Array.from({length:10},(_,i)=>({nombre:'Dos',lat:-34.81+i*.001,lon:-58.21}))
+];
+assert.equal(call('routeVariants().length'),1,'No inventar una vuelta sin evidencia');
 
 // Recorridos largos se muestrean, sin inventar puntos y conservando extremos.
 dataV3.route=Array.from({length:5000},(_,i)=>({
