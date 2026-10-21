@@ -1,6 +1,6 @@
 'use strict';
 /* Nueva experiencia V3: datos de servicio, jamás líneas ni arribos simulados. */
-const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],route:[],line:null,street:null,crossing:null,stop:null,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false};
+const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],route:[],line:null,street:null,crossing:null,stop:null,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
 const calls=new Map();let callNo=0;
 function native(action,params={}){
  return new Promise((resolve,reject)=>{
@@ -99,7 +99,7 @@ function chooseCrossing(i){
 }
 function chooseStop(i){
  const stop=dataV3.stops[i];if(!stop)return;
- dataV3.stop=stop;dataV3.arrivals=[];dataV3.arrivalsChecked=false;dataV3.mensaje='';go('arrival');loadArrivals();
+ dataV3.stop=stop;dataV3.arrivals=[];dataV3.diagnostico=null;dataV3.arrivalsChecked=false;dataV3.mensaje='';go('arrival');loadArrivals();
 }
 async function loadArrivals(){
  if(!dataV3.line||!dataV3.stop)return;
@@ -109,13 +109,43 @@ async function loadArrivals(){
  await request('arrivals',{linea:dataV3.line.id,parada:dataV3.stop.identificador||dataV3.stop.id},'arrivals');
  dataV3.arrivalsChecked=!dataV3.error;
 }
+async function diagnoseArrivals(){
+ if(!dataV3.stop||!dataV3.line)return;
+ dataV3.diagnosticando=true;dataV3.diagnostico=null;render();
+ try{dataV3.diagnostico=await native('diagnose.arrivals');}
+ catch(e){dataV3.diagnostico={estado:'consulta_fallida',respuesta:e.message||'Error sin detalle'};}
+ dataV3.diagnosticando=false;render();
+}
+function diagnosticPanel(){
+ if(!dataV3.stop||!dataV3.line||!dataV3.error)return '';
+ const stopId=String(dataV3.stop.identificador||dataV3.stop.id||'');
+ const lineId=String(dataV3.line.id||'');
+ let result='<div class="card"><h3>Diagnóstico de esta consulta</h3>'+
+ '<p>Parada: <strong>'+clean(stopId)+'</strong></p>'+
+ '<p>Línea interna: <strong>'+clean(lineId)+'</strong></p>'+
+ '<p>Ciudad enviada: <strong>QUILMES</strong></p>'+
+ '<p>Respuesta recibida: <strong>'+clean(dataV3.error)+'</strong></p>';
+ if(dataV3.diagnostico){
+  const d=dataV3.diagnostico;
+  const description=d.estado==='respuesta_recibida'
+   ?'Respuesta del servidor · registros '+String(d.cantidad??0)
+   :'Consulta de referencia rechazada';
+  result+='<p><strong>Parada de referencia MO-01080 / línea 77:</strong> '+clean(description)+'</p>'+
+  '<p>'+clean(d.respuesta||'Sin mensaje')+'</p>';
+ }
+ result+='<button class="secondary" onclick="diagnoseArrivals()" '+
+ (dataV3.diagnosticando?'disabled':'')+'>'+
+ (dataV3.diagnosticando?'Consultando referencia…':'Comparar con una parada de referencia')+
+ '</button><p style="font-size:12px">Este diagnóstico muestra solo códigos de transporte y estados de consulta. No revela credenciales.</p></div>';
+ return result;
+}
 function arrivalsV3(){
  if(!dataV3.stop||!dataV3.line)return intro('Próximas llegadas','Elegí una parada primero.','ARRIBOS')+'<button class="primary" onclick="go(\'lines\')">Buscar línea</button>';
  let out=back('stops')+intro('Próximas llegadas',clean(dataV3.line.nombre||dataV3.line.id)+' · '+clean(stopHeading(dataV3.stop)),'DATOS REALES')+
  '<div class="card"><div class="cardhead"><h3>Próximos colectivos</h3><button class="favourite" onclick="toggleFavorite()" aria-label="Guardar esta parada">'+I('star')+'</button></div>';
  out+=dataV3.arrivals.length?dataV3.arrivals.map(a=>'<div class="arrival-entry">'+I('clock')+'<div><strong>'+clean(a.arribo||'Sin estimación')+'</strong><small>'+clean(a.linea||'')+' · '+clean(a.destino||'')+'</small></div></div>').join(''):
  (!dataV3.loading&&!dataV3.error?'<div class="screen-note"><strong>Sin arribos informados en este momento.</strong><p>'+clean(dataV3.mensaje||'No se recibieron predicciones para esta parada y sentido. Podés volver a consultar.')+'</p></div>':'');
- return out+'</div><button class="primary" onclick="loadArrivals()">'+I('refresh')+' Actualizar llegadas</button>'+feedback();
+ return out+'</div><button class="primary" onclick="loadArrivals()">'+I('refresh')+' Actualizar llegadas</button>'+feedback()+diagnosticPanel();
 }
 function favoritesV3(){try{const a=JSON.parse(localStorage.getItem('moqsa_v3_favs')||'[]');return Array.isArray(a)?a.filter(x=>x&&x.line&&x.stop).slice(0,100):[];}catch(e){return [];}}
 function toggleFavorite(){
@@ -130,7 +160,7 @@ function favsV3(){
  const favs=favoritesV3();return intro('Tus favoritos','Acceso rápido a tus paradas guardadas.','GUARDADOS')+
  (favs.length?favs.map((f,i)=>item(f.line.nombre||f.line.id,stopHeading(f.stop),'openFavorite('+i+')','star')).join(''):empty('favoritos'));
 }
-function openFavorite(i){const f=favoritesV3()[i];if(!f)return;dataV3.line=f.line;dataV3.stop=f.stop;dataV3.arrivals=[];dataV3.error='';go('arrival');loadArrivals();}
+function openFavorite(i){const f=favoritesV3()[i];if(!f)return;dataV3.line=f.line;dataV3.stop=f.stop;dataV3.diagnostico=null;dataV3.arrivals=[];dataV3.error='';go('arrival');loadArrivals();}
 function routesV3(){
  if(!dataV3.line)return intro('Recorridos','Primero elegí una línea.','RECORRIDOS')+'<button class="primary" onclick="go(\'lines\')">Elegir línea</button>';
  return back('lines')+intro('Recorrido: '+clean(dataV3.line.nombre||dataV3.line.id),'Puntos recibidos del servicio.','RECORRIDOS')+
