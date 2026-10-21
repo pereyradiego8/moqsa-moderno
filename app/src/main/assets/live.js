@@ -900,7 +900,8 @@ function snapshotNavScreen(){
  if(screen==='routes'){
   previous.route={
    line:dataV3.routeLine,items:dataV3.route,query:dataV3.routeQuery,
-   variant:dataV3.routeVariant,error:dataV3.routeError,mapError:dataV3.routeMapError
+   variant:dataV3.routeVariant,error:dataV3.routeError,mapError:dataV3.routeMapError,
+   addresses:dataV3.routeAddresses
   };
  }
  return previous;
@@ -924,6 +925,8 @@ function restoreNavScreen(entry){
   dataV3.routeVariant=entry.route.variant||0;
   dataV3.routeError=entry.route.error||'';
   dataV3.routeMapError=entry.route.mapError||'';
+  dataV3.routeAddresses=entry.route.addresses||{};
+  dataV3.routeAddressPending=false;
   dataV3.routeLoading=false;
   dataV3.routeMapLoading=false;
  }
@@ -936,7 +939,9 @@ function resetRouteSelection(){
  dataV3.routeRequestId++;
  dataV3.routeLine=null;dataV3.routeQuery='';dataV3.route=[];
  dataV3.routeLoading=false;dataV3.routeError='';dataV3.routeVariant=0;
+ dataV3.routeAddresses={};dataV3.routeAddressPending=false;
  dataV3.routeMapLoading=false;dataV3.routeMapError='';
+ dataV3.routeAddresses={};dataV3.routeAddressPending=false;
  dataV3.routeListScroll=0;
 }
 // Cada navegación nueva crea un nivel. Se recupera el desplazamiento al volver.
