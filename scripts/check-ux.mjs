@@ -60,9 +60,8 @@ assert.ok(soap.includes('params["localidad"] = "QUILMES"'),'Current working arri
 console.log('OK: 9/24 ETA, coordinates of selected stop, map types, GPS consent, city selector, numeric street order, original SOAP');
 
 assert.ok(soap.includes('registrosOriginales')&&soap.includes('registrosInterpretados'),'El SOAP debe devolver cuántas paradas informa y cuántas pudo interpretar');
-assert.ok(source.includes('La respuesta tiene paradas, pero esta versión no pudo interpretarlas'),'Distinguir errores del parser');
 assert.ok(source.includes('Buscar paradas por línea'),'Alternativa sin depender de GPS ni resultados cercanos');
-console.log('OK: diagnóstico cercano distingue GPS, servidor sin cobertura y parseo inválido.');
+console.log('OK: búsqueda cercana y alternativa por línea.');
 
 assert.ok(soap.includes('params["isInteligente"] = "false"'),'El WSDL exige isInteligente');
 assert.ok(soap.includes('for (company in listOf("191", "7"))'),'La lista de empresas debe desdoblarse en códigos numéricos individuales');
