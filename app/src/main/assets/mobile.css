@@ -22,3 +22,4 @@ input,select,textarea{font-size:16px!important;max-width:100%}
 .iconbtn{min-width:44px;min-height:44px}
 button{touch-action:manipulation}
 @media(max-width:360px){.topbar{padding:6px 10px}.brand-symbol{width:36px;height:36px}.content{padding-left:10px;padding-right:10px}.hero{padding:15px}.hero-bus{width:78px;height:78px;right:12px;top:74px}.quick-card{min-height:120px;padding:11px}.nav-btn{font-size:10px}}
+@media(min-width:620px){.content{padding-left:6vw;padding-right:6vw}.quick-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.quick-card{min-height:145px}.bottom{justify-content:center}.nav-btn{max-width:155px}.hero{min-height:205px}}
