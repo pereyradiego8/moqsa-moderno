@@ -49,8 +49,8 @@ class MapActivity : Activity() {
             setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(true)
             setBuiltInZoomControls(true)
-            minZoomLevel = 3.0
-            maxZoomLevel = 20.0
+            setMinZoomLevel(3.0)
+            setMaxZoomLevel(20.0)
             controller.setZoom(14.0)
         }
         root.addView(map, LinearLayout.LayoutParams(-1, 0, 1f))
