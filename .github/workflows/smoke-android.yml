@@ -9,6 +9,9 @@ on:
       - 'app/src/main/assets/live.js'
       - 'app/src/main/java/ar/com/colectivos/consulta/OriginalSoap.kt'
       - 'app/src/main/java/ar/com/colectivos/consulta/MainActivity.kt'
+      - 'app/src/main/java/ar/com/colectivos/consulta/MapActivity.kt'
+      - 'app/src/main/AndroidManifest.xml'
+      - 'app/build.gradle.kts'
       - 'app/src/main/java/ar/com/colectivos/consulta/DirectSettings.kt'
 permissions:
   contents: read
@@ -64,3 +67,13 @@ jobs:
             adb logcat -d -s AndroidRuntime:E ActivityTaskManager:E ActivityManager:E dalvikvm:E
             test -s /tmp/moqsa.pid
             echo 'APP SURVIVED LAUNCH WITH FAKE PRIVATE DEX'
+            echo '=== Mapa: intentar iniciar actividad interna en APK debug ==='
+            if adb shell run-as ar.com.colectivos.consulta am start -W -n ar.com.colectivos.consulta/.MapActivity --es map_title 'Prueba de recorrido' --es map_type route --es map_points '[{"lat":-34.75,"lon":-58.26,"nombre":"A"},{"lat":-34.76,"lon":-58.25,"nombre":"B"}]'; then
+              sleep 5
+              adb shell pidof ar.com.colectivos.consulta > /tmp/moqsa.map.pid || true
+              test -s /tmp/moqsa.map.pid
+              echo 'MAP ACTIVITY SURVIVED LAUNCH'
+            else
+              echo 'Launch interno no permitido desde shell; se requiere test manual del mapa.'
+            fi
+
