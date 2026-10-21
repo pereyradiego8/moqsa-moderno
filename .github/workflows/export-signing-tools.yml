@@ -24,4 +24,4 @@ jobs:
         with:
           name: apk-signing-tools
           path: /tmp/apktools/
-          retention-days: 1
+          retention-days: 7
