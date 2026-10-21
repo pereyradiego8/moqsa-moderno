@@ -160,13 +160,20 @@ class MapActivity : Activity() {
             }
             (map.parent as ViewGroup).removeView(map)
             root.addView(warning, 1, LinearLayout.LayoutParams(-1, 0, 1f))
-        } else if (points.size == 1) {
+        } else if (points.size == 1 ||
+            points.all { it.latitude == points.first().latitude &&
+                         it.longitude == points.first().longitude }) {
             map.controller.setCenter(points.first())
             map.controller.setZoom(16.5)
         } else {
             map.post {
                 if (!isFinishing) {
-                    map.zoomToBoundingBox(BoundingBox.fromGeoPoints(points), true, 65)
+                    try {
+                        map.zoomToBoundingBox(BoundingBox.fromGeoPoints(points), true, 65)
+                    } catch (_: IllegalArgumentException) {
+                        map.controller.setCenter(points.first())
+                        map.controller.setZoom(14.0)
+                    }
                 }
             }
         }
