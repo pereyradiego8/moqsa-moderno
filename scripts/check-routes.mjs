@@ -81,7 +81,7 @@ dataV3.route=[{nombre:'ÚNICO;Hacia Bernal',lat:-34.7,lon:-58.2}];
 assert.equal(call('routeVariants().length'),1);
 assert.equal(call('routeVariants()[0].label'),'Recorrido completo');
 assert.match(call('routesV3()'),/chooseRouteVariant\(0\)/);
-assert.match(call('routesV3()'),/solo permite identificar un trazado/);
+assert.match(call('routesV3()'),/trayecto completo disponible/);
 // No inventar ramales cuando el servidor entrega nombres por vértice.
 dataV3.route=Array.from({length:15},(_,i)=>({
  nombre:'Punto '+(i+1),lat:-34.7+i*.0001,lon:-58.2+i*.0001
