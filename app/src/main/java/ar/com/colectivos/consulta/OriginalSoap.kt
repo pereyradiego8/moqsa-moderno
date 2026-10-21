@@ -28,6 +28,19 @@ class OriginalSoap(private val settings: DirectSettings) {
     }
 
     fun execute(action: String, q: JSONObject): JSONObject {
+        if (action == "route") {
+            var firstError: Exception? = null
+            val first = try { executeOnce("route", q, null) }
+                catch (e: Exception) { firstError = e; null }
+            if (first != null && hasRouteCoordinates(first)) return first
+            // El WSDL ofrece un segundo mapa de puntos y paradas de la misma línea.
+            val alternate = try { executeOnce("routeStopsMap", q, null) }
+                catch (_: Exception) { null }
+            if (alternate != null && hasRouteCoordinates(alternate)) return alternate
+            if (first != null) return first
+            if (alternate != null) return alternate
+            throw firstError ?: IllegalStateException("El proveedor no entregó el recorrido solicitado")
+        }
         if (action != "nearby" && action != "nearbyArrivals") return executeOnce(action, q, null)
 
         // Los métodos de cercanía aceptan lista de empresas, pero con "191,7" devolvía
@@ -99,6 +112,18 @@ class OriginalSoap(private val settings: DirectSettings) {
             .put("fuente", "SOAP original MOQSA")
     }
 
+    private fun hasRouteCoordinates(data: JSONObject): Boolean {
+        val items = data.optJSONArray("items") ?: return false
+        for (i in 0 until items.length()) {
+            val point = items.optJSONObject(i) ?: continue
+            val lat = point.optDouble("lat", Double.NaN)
+            val lon = point.optDouble("lon", Double.NaN)
+            if (lat.isFinite() && lon.isFinite() && lat in -90.0..90.0 &&
+                lon in -180.0..180.0 && !(lat == 0.0 && lon == 0.0)) return true
+        }
+        return false
+    }
+
     private fun executeOnce(action: String, q: JSONObject, companyCode: String?): JSONObject {
         val (user, pass) = settings.credentials()
         val params = linkedMapOf<String, String>()
@@ -135,9 +160,16 @@ class OriginalSoap(private val settings: DirectSettings) {
                 // No debe derivarse de la calle elegida (p.ej. CALLE 24 - BERAZATEGUI).
                 params["localidad"] = "QUILMES"
             }
-            "route" -> {
-                operation = "RecuperarRecorridoParaMapaAbrevYAmpliPorEntidadYLinea"
+            "route", "routeStopsMap" -> {
+                // Firma WSDL comprobada: usuario, clave, codigoLineaParada, isSublinea.
+                operation = if (action == "route")
+                    "RecuperarRecorridoParaMapaAbrevYAmpliPorEntidadYLinea"
+                else "RecuperarParadasConBanderaYDestinoPorLinea"
+                params["usuario"] = user
+                params["clave"] = pass
                 params["codigoLineaParada"] = required(q, "linea")
+                params["isSublinea"] = q.optBoolean("isSublinea", false).toString()
+                if (action == "routeStopsMap") params["isInteligente"] = "false"
             }
             "nearbyArrivals" -> {
                 // Operación del WSDL original destinada a consultar todas las líneas
@@ -169,7 +201,8 @@ class OriginalSoap(private val settings: DirectSettings) {
             }
             else -> throw IllegalArgumentException("Operación SOAP desconocida")
         }
-        if (action != "lines" && action != "nearby" && action != "nearbyArrivals") {
+        if (action != "lines" && action != "nearby" && action != "nearbyArrivals" &&
+            action != "route" && action != "routeStopsMap") {
             params["usuario"] = user
             params["clave"] = pass
         }
@@ -200,7 +233,9 @@ class OriginalSoap(private val settings: DirectSettings) {
                 while (true) {
                     val count = input.read(buffer)
                     if (count < 0) break
-                    if (response.size() + count > 900_000) throw IllegalStateException("Respuesta SOAP demasiado grande")
+                    val maxBytes = if (action == "route" || action == "routeStopsMap") 4_000_000 else 900_000
+                    if (response.size() + count > maxBytes)
+                        throw IllegalStateException("Respuesta demasiado grande")
                     response.write(buffer, 0, count)
                 }
             }
@@ -241,7 +276,7 @@ class OriginalSoap(private val settings: DirectSettings) {
             }
             if (raw == null) throw IllegalStateException("El servicio no devolvió el resultado SOAP esperado")
             val payload = decode(raw)
-            val items = normalize(action, payload)
+            val items = normalize(if (action == "routeStopsMap") "route" else action, payload)
             val message = value(payload, "MensajeEstado", "mensajeEstado", "mensaje")?.toString()?.trim() ?: ""
             if (action == "arrivals" && items.length() == 0 &&
                 message.contains("Parada inexistente", ignoreCase = true)) {
@@ -289,7 +324,7 @@ class OriginalSoap(private val settings: DirectSettings) {
     }
     private fun str(obj: Any?, vararg names: String): String = value(obj, *names)?.toString() ?: ""
     private fun number(obj: Any?, vararg names: String): Any {
-        val n = value(obj, *names)?.toString()?.toDoubleOrNull()
+        val n = value(obj, *names)?.toString()?.trim()?.replace(',', '.')?.toDoubleOrNull()
         return n ?: JSONObject.NULL
     }
     private fun rows(root: Any, names: Array<String>, depth: Int = 0): JSONArray {
@@ -332,7 +367,7 @@ class OriginalSoap(private val settings: DirectSettings) {
             "stops","nearby" -> arrayOf("Parada","Paradas","ListadoParadas")
             "arrivals","nearbyArrivals" -> arrayOf("Arribos","Arribo","ProximosArribos",
                 "ProximoArribo","ArribosParadasCercanas","ProximosArribosParaParadasCercanas")
-            "route" -> arrayOf("Puntos","Recorrido")
+            "route" -> arrayOf("Puntos","Punto","Recorrido","Coordenadas")
             else -> arrayOf("items")
         }
         val input = rows(raw, keys)
@@ -345,6 +380,8 @@ class OriginalSoap(private val settings: DirectSettings) {
                 "lines" -> {
                     normalized.put("id", str(obj,"CodigoLineaParada","Codigo","codigo"))
                     normalized.put("nombre",str(obj,"Descripcion","nombre"))
+                    normalized.put("isSublinea",str(obj,"IsSublinea","EsSublinea","isSubLinea")
+                        .let { it.equals("true", true) || it == "1" })
                 }
                 "streets","crossings" -> {
                     normalized.put("id",str(obj,"Codigo","codigo"))
@@ -396,9 +433,9 @@ class OriginalSoap(private val settings: DirectSettings) {
                 }
                 "route" -> {
                     normalized.put("id",str(obj,"Codigo"))
-                    normalized.put("nombre",str(obj,"Descripcion"))
-                    normalized.put("lat",number(obj,"Latitud"))
-                    normalized.put("lon",number(obj,"Longitud"))
+                    normalized.put("nombre",str(obj,"Descripcion","Nombre"))
+                    normalized.put("lat",number(obj,"Latitud","Latitude","LatitudParada"))
+                    normalized.put("lon",number(obj,"Longitud","Longitude","LongitudParada"))
                 }
             }
             if (kind == "arrivals" ||
@@ -407,7 +444,8 @@ class OriginalSoap(private val settings: DirectSettings) {
                      normalized.optString("arribo").isNotBlank())) ||
                 normalized.optString("id").isNotBlank() ||
                 normalized.optString("identificador").isNotBlank() ||
-                normalized.optString("nombre").isNotBlank()) out.put(normalized)
+                normalized.optString("nombre").isNotBlank() ||
+                (kind == "route" && !normalized.isNull("lat") && !normalized.isNull("lon"))) out.put(normalized)
         }
         return out
     }
