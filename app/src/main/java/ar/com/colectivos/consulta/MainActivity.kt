@@ -72,29 +72,6 @@ class MainActivity : Activity() {
                         "health" -> JSONObject()
                             .put("configured", directSettings.hasCredentials())
                             .put("service", "SOAP original de MOQSA")
-                        "diagnose.arrivals" -> {
-                            // Prueba de referencia de una combinación que devolvió un
-                            // arribo real en la verificación previa. No devuelve credenciales.
-                            val sampleLine = "77"
-                            val sampleStop = "MO-01080"
-                            val test = JSONObject()
-                                .put("lineaInterna", sampleLine)
-                                .put("parada", sampleStop)
-                                .put("ciudad", "QUILMES")
-                            try {
-                                val response = directSoap.execute(
-                                    "arrivals",
-                                    JSONObject().put("linea", sampleLine).put("parada", sampleStop)
-                                )
-                                test.put("respuesta", response.optString("mensaje", ""))
-                                test.put("cantidad", response.optJSONArray("items")?.length() ?: 0)
-                                test.put("estado", "respuesta_recibida")
-                            } catch (e: Exception) {
-                                test.put("estado", "consulta_fallida")
-                                test.put("respuesta", (e.message ?: "Error de consulta").take(240))
-                            }
-                            test
-                        }
                         else -> directSoap.execute(action, args)
                     }
                     JSONObject().put("ok", true).put("data", value)
