@@ -1,9 +1,9 @@
-# Estado de implementación — V3
+# Estado de MOQSA Moderno
 
-Se trasladó la interfaz V3 aprobada a `app/src/main/assets/index.html`, agregando `live.js` para sustituir datos simulados por respuestas del puente JSON. El puente SOAP está en `backend/` y requiere credenciales propias en el servidor.
+Arquitectura de red: `Android → HTTPS → clswbsas.smartmovepro.net/ModuloParadas/SWParadas.asmx`.
 
-Conectadas en código: líneas, calles, intersecciones, paradas, llegadas, favoritos locales, consulta de puntos de recorrido.
+El WebService responde por HTTPS y sus operaciones y parámetros fueron validados previamente. Se retiró el antiguo proxy JSON del código y de la compilación. En esta nueva arquitectura el servidor SOAP requiere usuario y contraseña autorizados, que se guardan cifrados en el dispositivo y no forman parte del APK público.
 
-Sin cerrar: compilación Android en CI, validación real del backend, GPS, mapas interactivos, voz, reclamos y pruebas físicas.
+Antes de declarar la aplicación lista: instalar el nuevo APK, configurar las credenciales, comprobar consulta de líneas, calles, intersecciones, paradas y tiempos, además de verificar mapas, GPS y funciones pendientes.
 
-No instalar como reemplazo definitivo hasta completar validaciones.
+El repositorio sólo contiene el cliente Android. Sin código de servidor y sin despliegue de middleware.

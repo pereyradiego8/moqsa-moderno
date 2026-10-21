@@ -120,20 +120,36 @@ function routesV3(){
  (dataV3.route.length?'<div class="card">'+dataV3.route.map(r=>'<div class="stop-item">'+clean(r.nombre||r.id||'Punto')+'</div>').join('')+'</div>':notice('El mapa real todavía está pendiente de integración.'))+feedback();
 }
 function settingsV3(){
- return intro('Conectar servicio','Agregá la URL HTTPS del backend JSON.','CONFIGURACIÓN')+
- '<div class="card"><div class="field"><label for="apiUrl">URL del backend</label><input id="apiUrl" type="url" inputmode="url" placeholder="https://tu-backend.example.com" value="'+clean(dataV3.backend)+'"/></div>'+
- '<button class="primary" onclick="saveApi()">'+I('check')+' Guardar conexión</button></div>'+
- notice('Las credenciales SOAP se guardan solo en el servidor. Nunca están incluidas en este APK.')+
- '<button class="secondary" onclick="checkApi()">Comprobar estado</button>'+feedback();
+ return intro('Servidor original de MOQSA','Conexión HTTPS directa sin servicios intermedios.','CONEXIÓN SOAP')+
+ '<div class="card"><div class="field"><label>Servidor original</label><p style="overflow-wrap:anywhere">clswbsas.smartmovepro.net · HTTPS</p></div>'+
+ '<div class="field"><label>Entidad</label><p>4 (APK 1.7)</p></div>'+
+ '<div class="field"><label>Aplicación</label><p>24 (APK 1.7)</p></div>'+
+ '<p><strong>Estado:</strong> '+(dataV3.configured?'Acceso guardado en este teléfono':'Faltan credenciales del servidor original')+'</p>'+
+ '<div class="field"><label for="soapUser">Usuario SOAP</label><input id="soapUser" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Usuario del servidor original"/></div>'+
+ '<div class="field"><label for="soapPassword">Contraseña SOAP</label><input id="soapPassword" type="password" autocomplete="off" placeholder="Contraseña del servicio"/></div>'+
+ '<button class="primary" onclick="saveApi()">'+I('check')+' Guardar credenciales</button></div>'+
+ notice('Se conecta directamente al servicio original y cifra las claves en el dispositivo. No almacena credenciales en este repositorio.')+
+ '<button class="secondary" onclick="checkApi()">Probar consulta real</button>'+feedback();
 }
-async function loadConfig(){try{const c=await native('config.get');dataV3.backend=c.baseUrl||'';if(screen==='settings')render();}catch(e){}}
-async function saveApi(){
- try{const url=document.getElementById('apiUrl').value.trim();await native('config.set',{baseUrl:url});dataV3.backend=url;dataV3.error='';toast('Backend guardado');go('lines');}
+async function loadConfig(){
+ try{const c=await native('config.get');dataV3.configured=Boolean(c.configured);if(screen==='settings')render();}
  catch(e){dataV3.error=e.message;render();}
+}
+async function saveApi(){
+ try{
+  const user=document.getElementById('soapUser').value.trim();
+  const password=document.getElementById('soapPassword').value;
+  await native('config.set',{user,password});
+  dataV3.configured=true;dataV3.error='';toast('Acceso guardado');go('lines');
+ }catch(e){dataV3.error=e.message;render();}
 }
 async function checkApi(){
- try{const status=await native('health');dataV3.error='';toast(status.configured?'Servidor configurado':'Servidor accesible, pero sin credenciales');}
- catch(e){dataV3.error=e.message;render();}
+ dataV3.loading=true;dataV3.error='';render();
+ try{
+  const res=await native('lines');
+  if(!Array.isArray(res.items)||!res.items.length)throw Error('No llegaron líneas del servicio original');
+  dataV3.lines=res.items;dataV3.loading=false;toast('Conectado: '+res.items.length+' líneas');go('lines');
+ }catch(e){dataV3.loading=false;dataV3.error=e.message;render();}
 }
 function pendingV3(title){return intro(title,'Sección todavía no conectada al servicio real.','EN PREPARACIÓN')+
  '<div class="card empty"><h3>Función en desarrollo</h3><p>No mostramos datos de ejemplo como si fueran reales.</p></div>'+
