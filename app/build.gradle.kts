@@ -5,6 +5,7 @@ plugins {
 android {
     namespace = "ar.com.colectivos.consulta"
     compileSdk = 35
+    androidResources { noCompress.add("dat") }
     defaultConfig {
         applicationId = "ar.com.colectivos.consulta"
         minSdk = 26
