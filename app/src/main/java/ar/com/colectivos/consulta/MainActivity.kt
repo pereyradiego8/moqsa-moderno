@@ -34,6 +34,14 @@ class MainActivity : Activity() {
         web.settings.setAllowUniversalAccessFromFileURLs(false)
         web.settings.setAllowFileAccessFromFileURLs(false)
         web.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                if (url == "file:///android_asset/index.html") {
+                    view?.evaluateJavascript(
+                        "(function(){var x=document.createElement('link');x.rel='stylesheet';x.href='mobile.css';document.head.appendChild(x)})()", null
+                    )
+                }
+            }
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                 val uri = request?.url ?: return null
                 if (uri.scheme == "http" || uri.scheme == "https")
