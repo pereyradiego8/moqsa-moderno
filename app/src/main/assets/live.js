@@ -321,17 +321,17 @@ function openFavorite(i){const f=favoritesV3()[i];if(!f)return;dataV3.line=f.lin
 function routesV3(){
  if(!dataV3.line)return intro('Recorridos','Elegí una línea para ver su trayecto sobre el mapa.','RECORRIDOS')+
  '<button class="primary" onclick="go(\'lines\')">Elegir línea</button>'+
- notice('Primero seleccioná una línea; después tocá “Ver recorrido de la línea” en Paradas.');
+ notice('Elegí una línea para ver su recorrido.');
  const coords=geoPoints(dataV3.route,(v,i)=>v.nombre||'Punto '+String(i+1));
  let out=back('stops')+intro('Recorrido · '+clean(dataV3.line.nombre||dataV3.line.id),'Trayecto de la línea sobre OpenStreetMap.','MAPA DEL RECORRIDO')+
  '<button class="primary" onclick="loadRoute()">'+I('refresh')+' Consultar recorrido real</button>';
  if(coords.length){
-   out+='<div class="card"><h3>Recorrido disponible</h3><p>'+coords.length+' puntos geográficos recibidos del servidor de transporte.</p></div>'+
+   out+='<div class="card"><h3>Recorrido disponible</h3><p>Podés explorarlo en el mapa.</p></div>'+
    '<button class="secondary map-action" onclick="openRouteMap()">'+I('pin')+' Abrir recorrido en mapa interactivo</button>';
  }else if(!dataV3.loading&&!dataV3.error){
-   out+=notice('Seleccioná “Consultar recorrido real”. El mapa se habilitará cuando el servicio original entregue coordenadas válidas.');
+   out+=notice('Tocá Consultar recorrido para ver el trayecto en el mapa.');
  }
- return out+feedback()+(dataV3.route.length&&!coords.length?notice('El servicio devolvió datos del recorrido, pero no coordenadas interpretables. No se dibuja una ruta ficticia.'):'');
+ return out+feedback()+(dataV3.route.length&&!coords.length?notice('No hay un mapa disponible para este recorrido.'):'');
 }
 function metersBetween(a,b){
  if(!a||!b)return null;
@@ -356,7 +356,7 @@ async function loadNearby(){
   dataV3.nearAccuracy=Number.isFinite(Number(location.precisionMetros))?
    Math.max(0,Math.round(Number(location.precisionMetros))):null;
   const response=await native('nearby',{lat:String(location.lat),lon:String(location.lon)});
-  if(!Array.isArray(response.items))throw Error('Respuesta SOAP inesperada; no se pudieron interpretar paradas');
+  if(!Array.isArray(response.items))throw Error('No pudimos completar la búsqueda.');
   dataV3.nearby=response.items;
   dataV3.nearDiagnostic={
    codigoEstado:response.codigoEstado,
@@ -365,40 +365,13 @@ async function loadNearby(){
    interpretados:Number(response.registrosInterpretados),
    parcial:Boolean(response.parcial)
   };
- }catch(e){dataV3.nearError=e.message||'No se pudieron obtener paradas cercanas';}
+ }catch(e){const message=String(e.message||'');dataV3.nearError=/ubicaci[oó]n|GPS|permiso|precisa/i.test(message)?message:'No encontramos paradas. Probá otra vez.';}
  dataV3.nearLoading=false;render();
 }
-function nearbyStateCard(){
- if(!dataV3.nearLocation||dataV3.nearLoading)return '';
- const d=dataV3.nearDiagnostic;
- let out='<div class="card"><h3>Resultado de la búsqueda</h3>';
- if(dataV3.nearAccuracy!=null){
-   out+='<p>Precisión estimada del GPS: <strong>'+clean(dataV3.nearAccuracy)+' m</strong></p>';
-   if(dataV3.nearAccuracy>500)out+='<p>La ubicación es poco precisa. Activá ubicación precisa y volvé a buscar.</p>';
- }
- if(d){
-   const original=Number.isFinite(d.originales)?d.originales:null;
-   const parsed=Number.isFinite(d.interpretados)?d.interpretados:dataV3.nearby.length;
-   if(d.parcial)out+='<p><strong>Resultado parcial.</strong> Una de las consultas al servidor no pudo completarse. Las paradas mostradas pueden no representar toda la zona.</p>';
-   if(original!==null && original>0 && parsed===0){
-     out+='<p><strong>La respuesta tiene paradas, pero esta versión no pudo interpretarlas.</strong> Es un problema de la aplicación, no de tu ubicación.</p>';
-   }else if(original===0){
-     out+='<p><strong>No hubo paradas en las respuestas válidas.</strong> Esto no demuestra que no existan cerca. El servicio no publica el radio y puede tener cobertura limitada.</p>';
-   }else{
-     out+='<p>Registros recibidos: <strong>'+clean(parsed)+'</strong></p>';
-   }
-   if(d.mensaje)out+='<p>Mensaje del servidor: '+clean(d.mensaje)+'</p>';
-   if(d.codigoEstado!=null&&d.codigoEstado!=='')out+='<p>Estado del servicio: '+clean(d.codigoEstado)+'</p>';
- }
- if(dataV3.nearError)out+='<p><strong>Error:</strong> '+clean(dataV3.nearError)+'</p>';
- out+='</div><button class="secondary map-action" onclick="openNearMap()">'+I('pin')+
-  ' Comprobar mi ubicación en el mapa</button>';
- return out;
-}
 function nearbyV3(){
- let out=intro('Paradas cerca tuyo','Función experimental: el SOAP original puede no ofrecer datos suficientes en tu zona.','CERCA DE MÍ')+
+ let out=intro('Paradas cerca tuyo','Encontrá paradas cerca de donde estás.','CERCA DE MÍ')+
  '<div class="card"><h3>Buscar paradas cercanas</h3>'+
- '<p>Android pide permiso cuando tocás Buscar. La ubicación se envía al servidor SOAP original para consultar paradas, sin pasar por servidores propios.</p>'+
+ '<p>Usamos tu ubicación para buscar paradas cercanas.</p>'+
  '<button class="primary" onclick="loadNearby()" '+(dataV3.nearLoading?'disabled':'')+'>'+
  I('pin')+' '+(dataV3.nearLoading?'Buscando tu ubicación…':'Buscar paradas cerca de mí')+'</button></div>';
  if(dataV3.nearby.length){
@@ -413,10 +386,10 @@ function nearbyV3(){
    return item(loc.street,summary,'openNearbyStop('+i+')','pin');
   }).join('');
  }else if(!dataV3.nearLoading&&!dataV3.nearError&&dataV3.nearDiagnostic){
-  out+=notice('Sin paradas informadas por el servicio. Cerca es una función experimental; podés buscar normalmente por línea y localidad.');
+  out+=notice('No encontramos paradas cerca por ahora. Podés buscar por línea y localidad.');
   out+='<button class="secondary" onclick="go(&quot;lines&quot;)">Buscar paradas por línea</button>';
  }
- if(dataV3.nearLocation&&!dataV3.nearLoading)out+=nearbyStateCard();
+ if(dataV3.nearLocation&&!dataV3.nearLoading)out+='<button class="secondary map-action" onclick="openNearMap()">'+I('pin')+' Ver mi ubicación en el mapa</button>';
  if(dataV3.nearError&&!dataV3.nearLocation)
   out+='<div class="card empty"><h3>No se pudo buscar</h3><p>'+clean(dataV3.nearError)+'</p></div>';
  return out;
@@ -524,11 +497,11 @@ function nearbyStopV3(){
    (distance!=null?'<p>'+clean(distanceText(distance))+' desde tu ubicación</p>':'')+'</div>'+
    '<div class="card arrival-panel"><div class="cardhead"><h3>Todas las líneas que llegan</h3></div>';
  if(dataV3.nearStopArrivals.length)out+=dataV3.nearStopArrivals.map(nearArrivalCard).join('');
- else if(dataV3.nearStopLoading)out+='<p>Consultando llegadas de las empresas disponibles…</p>';
+ else if(dataV3.nearStopLoading)out+='<p>Buscando llegadas…</p>';
  else if(dataV3.nearStopError)out+='<p>No fue posible obtener arribos de esta parada.</p>';
- else out+='<p>El proveedor no informó estimaciones para esta parada en este momento.</p>';
+ else out+='<p>Sin estimaciones por ahora.</p>';
  out+='</div>';
- if(dataV3.nearStopPartial)out+=notice('Resultado parcial: alguna empresa no respondió. Puede haber líneas o arribos no informados.');
+ if(dataV3.nearStopPartial)out+=notice('Puede haber más líneas sin estimación por ahora.');
  if(dataV3.nearStopError)out+='<div class="card empty"><h3>Consulta no disponible</h3><p>'+clean(dataV3.nearStopError)+'</p></div>';
  out+='<button class="primary" onclick="loadNearStopArrivals()" '+(dataV3.nearStopLoading?'disabled':'')+'>'+I('refresh')+
    (dataV3.nearStopLoading?' Consultando…':' Actualizar todas las llegadas')+'</button>';
@@ -537,7 +510,7 @@ function nearbyStopV3(){
  return out;
 }
 function settingsV3(){
- return intro('Servidor original de MOQSA','Conexión HTTPS directa sin servicios intermedios.','CONEXIÓN SOAP')+
+ return intro('Ajustes','Estado y configuración de la aplicación.','AJUSTES')+
  '<div class="card"><div class="field"><label>Servidor original</label><p style="overflow-wrap:anywhere">clswbsas.smartmovepro.net · HTTPS</p></div>'+
  '<div class="field"><label>Entidad</label><p>4 (APK 1.7)</p></div>'+
  '<div class="field"><label>Aplicación</label><p>24 (APK 1.7)</p></div>'+
@@ -545,7 +518,7 @@ function settingsV3(){
  '<div class="field"><label for="soapUser">Usuario SOAP</label><input id="soapUser" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Usuario del servidor original"/></div>'+
  '<div class="field"><label for="soapPassword">Contraseña SOAP</label><input id="soapPassword" type="password" autocomplete="off" placeholder="Contraseña del servicio"/></div>'+
  '<button class="primary" onclick="saveApi()">'+I('check')+' Guardar credenciales</button></div>'+
- notice('Se conecta directamente al servicio original y cifra las claves en el dispositivo. No almacena credenciales en este repositorio.')+
+ notice('La conexión está protegida en este dispositivo.')+
  '<button class="secondary" onclick="checkApi()">Probar consulta real</button>'+feedback();
 }
 async function loadConfig(){
@@ -574,8 +547,8 @@ function menuV3(){
  '<div class="more-grid">'+entries.map(([page,label,icon])=>
  '<button class="more-item" onclick="go(\''+page+'\')">'+I(icon)+clean(label)+'</button>').join('')+'</div>';
 }
-function pendingV3(title){return intro(title,'Sección todavía no conectada al servicio real.','EN PREPARACIÓN')+
- '<div class="card empty"><h3>Función en desarrollo</h3><p>No mostramos datos de ejemplo como si fueran reales.</p></div>'+
+function pendingV3(title){return intro(title,'Estamos preparando esta función.','PRÓXIMAMENTE')+
+ '<div class="card empty"><h3>Próximamente</h3><p>Volvé a consultar más adelante.</p></div>'+
  '<button class="secondary" onclick="go(\'lines\')">Consultar líneas</button>';}
 makers.home=mainV3;makers.more=menuV3;makers.lines=linesV3;makers.stops=stopsV3;makers.arrival=arrivalsV3;
 makers.fav=favsV3;makers.routes=routesV3;makers.map=routesV3;makers.time=arrivalsV3;
@@ -585,7 +558,7 @@ makers.settings=settingsV3;makers.near=nearbyV3;makers.journey=()=>pendingV3('¿
 makers.voice=()=>pendingV3('Búsqueda por voz');makers.reload=()=>pendingV3('Puntos de recarga');
 makers.reports=()=>pendingV3('Consultas y reclamos');makers.news=()=>pendingV3('Novedades');
 makers.shortcuts=()=>pendingV3('Accesos directos');
-makers.about=()=>intro('MOQSA','Consulta de colectivos.','ACERCA DE')+notice('Cliente no oficial. Consulta directamente el servicio SOAP original por HTTPS, sin servidor intermedio.');
+makers.about=()=>intro('MOQSA','Encontrá tu colectivo con más facilidad.','ACERCA DE')+notice('Aplicación independiente y no oficial. Los tiempos son estimaciones.');
 function helpV3(){
  const steps=[
  ['01','Buscá tu línea','Entrá en Líneas y escribí el número (por ejemplo, 300). Elegí el ramal que uses.'],
@@ -599,9 +572,9 @@ function helpV3(){
  '<div class="help-step"><span class="help-number">'+n+'</span><div><strong>'+title+'</strong><p>'+description+'</p></div></div>').join('')+'</div>'+
  '<div class="card help-tips"><h3>¿Cómo interpretar los tiempos?</h3>'+
  '<p><strong>“5 min aprox.”</strong> indica que el colectivo podría llegar en unos cinco minutos; no es una garantía.</p>'+
- '<p><strong>“Sin estimación”</strong> significa que el servidor no tiene una predicción disponible en ese momento.</p>'+
- '<p><strong>“Error de consulta”</strong> significa que no pudimos obtener una respuesta válida; reintentá o volvé a seleccionar la parada.</p></div>'+
- '<div class="card help-tips"><h3>Mapas y recorridos</h3><p>Podés abrir el mapa del recorrido desde Paradas → Ver recorrido de la línea. El mapa utiliza OpenStreetMap y solo dibuja coordenadas reales recibidas del servicio.</p></div>'+
+ '<p><strong>“Sin estimación”</strong> significa que no hay un tiempo disponible ahora.</p>'+
+ '<p><strong>“Error de consulta”</strong> significa que no pudimos consultar en ese momento; probá otra vez.</p></div>'+
+ '<div class="card help-tips"><h3>Mapas y recorridos</h3><p>Abrí el mapa desde una parada o un recorrido para ver su ubicación.</p></div>'+
  '<button class="primary" onclick="go(\'lines\')">'+I('bus')+' Empezar una consulta</button>'+
  '<button class="secondary" onclick="go(\'fav\')">'+I('star')+' Abrir mis paradas guardadas</button>';
 }
