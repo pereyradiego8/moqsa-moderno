@@ -1,6 +1,6 @@
 'use strict';
 /* Nueva experiencia V3: datos de servicio, jamás líneas ni arribos simulados. */
-const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],otherArrivals:[],otherLoading:false,otherNotice:'',otherPartial:false,otherRequestId:0,route:[],routeLine:null,routeQuery:'',routeLoading:false,routeError:'',routeRequestId:0,line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearAccuracy:null,nearDiagnostic:null,nearError:'',nearLoading:false,nearStop:null,nearStopArrivals:[],nearStopMessage:'',nearStopError:'',nearStopLoading:false,nearStopPartial:false,nearStopRequestId:0,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
+const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],otherArrivals:[],otherLoading:false,otherNotice:'',otherPartial:false,otherRequestId:0,route:[],routeLine:null,routeQuery:'',routeLoading:false,routeError:'',routeRequestId:0,routeListScroll:0,routeRefreshing:false,routeRefreshStatus:'',routeRefreshError:'',line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearAccuracy:null,nearDiagnostic:null,nearError:'',nearLoading:false,nearStop:null,nearStopArrivals:[],nearStopMessage:'',nearStopError:'',nearStopLoading:false,nearStopPartial:false,nearStopRequestId:0,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
 const calls=new Map();let callNo=0;
 function native(action,params={}){
  return new Promise((resolve,reject)=>{
@@ -337,7 +337,7 @@ function routeLineChoices(){
  const matches=orderedRows(dataV3.lines).filter(({r})=>
   String(r.nombre||r.id||'').toLocaleLowerCase('es-AR').includes(query));
  if(!matches.length){
-  if(dataV3.loading&&!dataV3.lines.length)return notice('Buscando líneas disponibles…');
+  if(dataV3.routeRefreshing)return notice('Buscando líneas disponibles…');
   return empty(query?'líneas que coincidan con tu búsqueda':'líneas disponibles');
  }
  return matches.map(({r,i})=>
@@ -350,38 +350,83 @@ function filterRouteLines(){
  dataV3.routeQuery=input.value||'';
  output.innerHTML=routeLineChoices();
 }
+function routeScrollToTop(){
+ if(typeof root!=='undefined'&&root)root.scrollTop=0;
+}
 function chooseRouteLine(i){
  const selected=dataV3.lines[Number(i)];
  if(!selected)return;
  dataV3.routeRequestId++;
+ dataV3.routeListScroll=typeof root!=='undefined'&&root?root.scrollTop:0;
  dataV3.routeLine=selected;
- dataV3.route=[];dataV3.routeQuery='';
- dataV3.routeLoading=false;dataV3.routeError='';
+ dataV3.route=[];dataV3.routeLoading=false;dataV3.routeError='';
  render();
+ routeScrollToTop();
  void loadRoute();
+}
+function backToRouteLines(){
+ dataV3.routeRequestId++;
+ dataV3.routeLine=null;dataV3.route=[];dataV3.routeLoading=false;dataV3.routeError='';
+ render();
+ if(typeof root!=='undefined'&&root)root.scrollTop=dataV3.routeListScroll||0;
+}
+async function refreshRouteLines(){
+ if(dataV3.routeRefreshing)return;
+ dataV3.routeRefreshing=true;
+ dataV3.routeRefreshStatus='Actualizando las líneas…';
+ dataV3.routeRefreshError='';
+ const applyStatus=()=>{
+  if(screen!=='routes'||dataV3.routeLine)return;
+  const status=document.getElementById('routeRefreshStatus');
+  if(status){status.textContent=dataV3.routeRefreshStatus;status.className='route-feedback'+(dataV3.routeRefreshError?' route-error':'');}
+  const button=document.getElementById('refreshRouteLines');
+  if(button)button.disabled=dataV3.routeRefreshing;
+ };
+ applyStatus();
+ try{
+  const response=await native('lines');
+  if(!response||!Array.isArray(response.items)||!response.items.length)
+   throw Error('Sin líneas disponibles');
+  dataV3.lines=response.items;
+  dataV3.routeRefreshStatus='Lista actualizada: '+response.items.length+' líneas.';
+  if(screen==='routes'&&!dataV3.routeLine){
+   const results=document.getElementById('routeLineResults');
+   if(results)results.innerHTML=routeLineChoices();
+  }
+ }catch(e){
+  dataV3.routeRefreshError='No pudimos actualizar las líneas. Revisá la conexión e intentá de nuevo.';
+  dataV3.routeRefreshStatus=dataV3.routeRefreshError;
+ }finally{
+  dataV3.routeRefreshing=false;
+  applyStatus();
+ }
 }
 function routesV3(){
  let out=back('home')+
   intro('Recorridos','Elegí una línea para consultar su trayecto en el mapa.','RECORRIDOS');
  if(dataV3.routeLine){
   const coords=geoPoints(dataV3.route,(v,i)=>v.nombre||'Punto '+String(i+1));
-  out+='<div class="card"><div class="cardhead"><h3>Recorrido · '+
+  out+='<div class="card route-detail" aria-live="polite"><div class="cardhead"><h3>Recorrido · '+
    clean(dataV3.routeLine.nombre||dataV3.routeLine.id)+'</h3></div>';
-  if(dataV3.routeLoading)out+='<p>Buscando el recorrido…</p>';
-  else if(dataV3.routeError)out+='<p>No pudimos consultar el recorrido. Volvé a intentarlo.</p>';
-  else if(coords.length)out+='<p>Podés explorar el trayecto en el mapa.</p>'+
-   '<button class="secondary map-action" onclick="openRouteMap()">'+I('pin')+' Abrir mapa interactivo</button>';
-  else out+='<p>No hay un recorrido con coordenadas disponible por ahora.</p>';
+  if(dataV3.routeLoading)out+='<p class="route-loading">Consultando recorrido…</p>';
+  else if(dataV3.routeError)out+='<p class="route-error">No pudimos obtener el recorrido de esta línea. Intentá nuevamente.</p>';
+  else if(coords.length)out+='<p>Recorrido disponible. Tocá para verlo en el mapa.</p>'+
+   '<button class="primary map-action" onclick="openRouteMap()">'+I('pin')+' Abrir mapa interactivo</button>';
+  else out+='<p>No recibimos un trayecto con coordenadas para esta línea.</p>';
   out+='<button class="secondary" onclick="loadRoute()" '+
-   (dataV3.routeLoading?'disabled':'')+'>'+I('refresh')+' Actualizar recorrido</button></div>';
+   (dataV3.routeLoading?'disabled':'')+'>'+I('refresh')+' Reintentar consulta</button></div>'+
+   '<button class="secondary route-change" onclick="backToRouteLines()">'+I('back')+' Elegir otra línea</button>';
+  return out;
  }
- out+='<div class="headrow"><h3>'+(dataV3.routeLine?'Elegir otra línea':'Todas las líneas')+'</h3></div>'+
+ out+='<div class="headrow"><h3>Todas las líneas</h3></div>'+
   '<div class="search-bar line-search">'+I('search')+
   '<input id="routeSearch" aria-label="Buscar línea para ver recorrido" placeholder="Buscar número o nombre" value="'+
   clean(dataV3.routeQuery)+'" oninput="filterRouteLines()"/></div>'+
-  '<div id="routeLineResults">'+routeLineChoices()+'</div>'+
-  '<button class="secondary" onclick="loadLines()">'+I('refresh')+' Actualizar líneas</button>';
- if(!dataV3.lines.length&&!dataV3.loading)out+=feedback();
+  '<div id="routeLineResults" class="route-line-list">'+routeLineChoices()+'</div>'+
+  '<button id="refreshRouteLines" class="secondary" onclick="refreshRouteLines()" '+
+  (dataV3.routeRefreshing?'disabled':'')+'>'+I('refresh')+' Actualizar líneas</button>'+
+  '<p id="routeRefreshStatus" class="route-feedback'+(dataV3.routeRefreshError?' route-error':'')+'" aria-live="polite">'+
+  clean(dataV3.routeRefreshStatus)+'</p>';
  return out;
 }
 function metersBetween(a,b){
@@ -639,7 +684,8 @@ go=function(key){
  navTrail.push(screen);
  if(navTrail.length>MAX_NAV_TRAIL)navTrail.shift();
  oldGo(destination);
- if((destination==='lines'||destination==='routes')&&!dataV3.lines.length)loadLines();
+ if(destination==='routes'&&!dataV3.lines.length)void refreshRouteLines();
+ else if(destination==='lines'&&!dataV3.lines.length)loadLines();
 };
 
 // Función compartida por Atrás Android y las flechas visibles.
@@ -648,7 +694,8 @@ window.moqsaGoBack=function(){
   const previous=navTrail.pop();
   if(!PAGES[previous]||previous===screen)continue;
   oldGo(previous);
-  if(previous==='lines'&&!dataV3.lines.length)loadLines();
+  if(previous==='routes'&&!dataV3.lines.length)void refreshRouteLines();
+  else if(previous==='lines'&&!dataV3.lines.length)loadLines();
   return true;
  }
  if(screen!=='home'){
