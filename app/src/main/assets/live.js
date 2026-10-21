@@ -138,16 +138,51 @@ function filterLines(){
 async function loadLines(){await request('lines',{},'lines');}
 function chooseLine(i){
  const selected=dataV3.lines[i];if(!selected)return;
- dataV3.line=selected;dataV3.street=null;dataV3.crossing=null;dataV3.stop=null;dataV3.streets=[];dataV3.crossings=[];dataV3.stops=[];dataV3.route=[];
+ dataV3.line=selected;dataV3.locality=null;dataV3.street=null;dataV3.crossing=null;dataV3.stop=null;dataV3.streets=[];dataV3.crossings=[];dataV3.stops=[];dataV3.route=[];
  go('stops');request('streets',{linea:selected.id},'streets');
 }
-function optionsV3(rows,index){return rows.map((r,i)=>'<option value="'+i+'"'+(index===String(i)?' selected':'')+'>'+clean(r.nombre||r.id)+'</option>').join('');}
+const citySorter=new Intl.Collator('es-AR',{sensitivity:'base',numeric:true,ignorePunctuation:true});
+function orderedRows(rows){
+ return (Array.isArray(rows)?rows:[]).map((r,i)=>({r,i})).sort((a,b)=>
+  citySorter.compare(String(a.r.nombre||a.r.id||''),String(b.r.nombre||b.r.id||'')));
+}
+function streetCity(record){
+ const explicit=String(record?.localidad||'').trim();
+ if(explicit)return explicit.toLocaleUpperCase('es-AR');
+ // El SOAP de calles incluye la localidad después del último " - ".
+ const raw=String(record?.nombre||'').trim();
+ const at=raw.lastIndexOf(' - ');
+ return at<0?'SIN LOCALIDAD INFORMADA':raw.slice(at+3).trim().toLocaleUpperCase('es-AR')||'SIN LOCALIDAD INFORMADA';
+}
+function cityList(){
+ const uniques=new Map();
+ for(const r of dataV3.streets){const town=streetCity(r);uniques.set(town.toLocaleLowerCase('es-AR'),town);}
+ return [...uniques.values()].sort((a,b)=>citySorter.compare(a,b));
+}
+function streetChoices(){
+ return orderedRows(dataV3.streets).filter(({r})=>streetCity(r)===dataV3.locality)
+   .map(({r,i})=>({r,i}));
+}
+function optionsV3(rows,index){
+ return orderedRows(rows).map(({r,i})=>'<option value="'+i+'"'+(index===String(i)?' selected':'')+'>'+clean(r.nombre||r.id)+'</option>').join('');
+}
+function chooseLocality(city){
+ dataV3.locality=city||null;
+ dataV3.street=null;dataV3.crossing=null;dataV3.crossings=[];dataV3.stops=[];dataV3.error='';
+ render();
+}
 function stopsV3(){
  if(!dataV3.line)return intro('Elegí una línea','Primero necesitás seleccionar una línea.','PARADAS')+'<button class="primary" onclick="go(\'lines\')">Ver líneas</button>';
- let out=back('lines')+intro('Paradas de '+clean(dataV3.line.nombre||dataV3.line.id),'Elegí la calle y la intersección.','PARADAS REALES')+
- '<div class="card"><div class="field"><label for="street">Calle</label><select id="street" onchange="chooseStreet(this.value)"><option value="">Elegí una calle</option>'+
- optionsV3(dataV3.streets,dataV3.street)+'</select></div>'+
- '<div class="field"><label for="crossing">Intersección</label><select id="crossing" onchange="chooseCrossing(this.value)"><option value="">Elegí una intersección</option>'+
+ let out=back('lines')+intro('Paradas de '+clean(dataV3.line.nombre||dataV3.line.id),
+ 'Elegí la localidad, la calle y después la intersección.','PARADAS REALES')+
+ '<div class="card"><div class="field"><label for="locality">1. Localidad</label>'+
+ '<select id="locality" onchange="chooseLocality(this.value)"><option value="">Elegí la localidad</option>'+
+ cityList().map(city=>'<option value="'+clean(city)+'"'+(dataV3.locality===city?' selected':'')+'>'+clean(city)+'</option>').join('')+
+ '</select></div><div class="field"><label for="street">2. Calle</label>'+
+ '<select id="street" onchange="chooseStreet(this.value)" '+(!dataV3.locality?'disabled':'')+'><option value="">Elegí una calle</option>'+
+ streetChoices().map(({r,i})=>'<option value="'+i+'"'+(dataV3.street===String(i)?' selected':'')+'>'+clean(r.nombre||r.id)+'</option>').join('')+
+ '</select></div><div class="field"><label for="crossing">3. Intersección</label>'+
+ '<select id="crossing" onchange="chooseCrossing(this.value)" '+(dataV3.street===null?'disabled':'')+'><option value="">Elegí una intersección</option>'+
  optionsV3(dataV3.crossings,dataV3.crossing)+'</select></div></div>';
  if(geoPoints(dataV3.stops).length)out+='<button class="secondary map-action" onclick="openStopsMap()">'+I('pin')+' Ver paradas en mapa</button>';
  out+='<button class="secondary map-action" onclick="go(\'routes\')">'+I('arrow')+' Ver recorrido de la línea</button>';
@@ -155,7 +190,7 @@ function stopsV3(){
  return out+feedback()+(dataV3.crossing!==null&&!dataV3.stops.length&&!dataV3.loading&&!dataV3.error?empty('paradas'):'');
 }
 function chooseStreet(i){
- if(i==='')return;const selected=dataV3.streets[Number(i)];if(!selected)return;
+ if(i==='')return;const selected=dataV3.streets[Number(i)];if(!selected||streetCity(selected)!==dataV3.locality)return;
  dataV3.street=i;dataV3.crossing=null;dataV3.crossings=[];dataV3.stops=[];
  request('crossings',{linea:dataV3.line.id,calle:selected.id},'crossings');
 }
