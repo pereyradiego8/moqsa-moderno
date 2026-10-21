@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - '.github/workflows/smoke-android.yml'
+      - 'scripts/patch_fake_creds.py'
+      - 'app/src/main/assets/direct_auth.dat'
 permissions:
   contents: read
 jobs:
