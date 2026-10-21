@@ -6,6 +6,9 @@ on:
       - '.github/workflows/smoke-android.yml'
       - 'scripts/patch_fake_creds.py'
       - 'app/src/main/assets/direct_auth.dat'
+      - 'app/src/main/assets/live.js'
+      - 'app/src/main/java/ar/com/colectivos/consulta/OriginalSoap.kt'
+      - 'app/src/main/java/ar/com/colectivos/consulta/DirectSettings.kt'
 permissions:
   contents: read
 jobs:
