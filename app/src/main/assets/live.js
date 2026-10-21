@@ -1,6 +1,6 @@
 'use strict';
 /* Nueva experiencia V3: datos de servicio, jamás líneas ni arribos simulados. */
-const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],route:[],line:null,street:null,crossing:null,stop:null,error:'',loading:false,backend:''};
+const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],route:[],line:null,street:null,crossing:null,stop:null,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false};
 const calls=new Map();let callNo=0;
 function native(action,params={}){
  return new Promise((resolve,reject)=>{
@@ -21,7 +21,7 @@ function item(row,detail,onclick,icon='bus'){
 }
 function feedback(){
  return (dataV3.loading?'<div class="card empty"><h3>Consultando servicio…</h3><p>Esperá un momento.</p></div>':'')+
- (dataV3.error?'<div class="card empty"><h3>Consulta no disponible</h3><p>'+clean(dataV3.error)+'</p><button class="secondary" onclick="go(\'settings\')">Configurar conexión</button></div>':'');
+ (dataV3.error?'<div class="card empty"><h3>No se pudo consultar el servidor original</h3><p>'+clean(dataV3.error)+'</p><button class="secondary" onclick="retryScreen()">Reintentar consulta</button></div>':'');
 }
 const empty=label=>'<div class="card empty"><h3>Sin '+clean(label)+'</h3><p>No hay resultados recibidos del servidor.</p></div>';
 async function request(action,params,field){
@@ -29,8 +29,22 @@ async function request(action,params,field){
  try{
   const resp=await native(action,params);
   if(!resp||!Array.isArray(resp.items))throw Error('Respuesta de API en formato inesperado');
-  dataV3[field]=resp.items;dataV3.loading=false;render();
- }catch(e){dataV3.loading=false;dataV3.error=e.message||'Error de conexión';render();}
+  dataV3[field]=resp.items;dataV3.mensaje=String(resp.mensaje||'').trim();dataV3.loading=false;render();
+ }catch(e){dataV3.loading=false;dataV3.mensaje='';dataV3.error=e.message||'Error de conexión';render();}
+}
+function retryScreen(){if(screen==='arrival')loadArrivals();else if(screen==='lines')loadLines();else if(screen==='stops'&&dataV3.line)request('streets',{linea:dataV3.line.id},'streets');}
+function stopHeading(r){
+ const direction=String(r.sentido||r.bandera||'').trim();
+ const desc=String(r.nombre||'').trim();
+ const ident=String(r.identificador||r.id||'').trim();
+ if(direction)return /^hacia\s/i.test(direction)?direction:'Hacia '+direction;
+ if(desc&&desc!==ident&&!/^MO-\d+/i.test(desc))return desc;
+ return 'Sentido no informado';
+}
+function stopSubtitle(r){
+ const id=String(r.identificador||r.id||'').trim();
+ const street=String(r.detalle||'').trim();
+ return [street,id?'Parada '+id:''].filter(Boolean).join(' · ')||'Consultar próximos arribos';
 }
 function mainV3(){
  return '<div class="greeting"><div class="eyebrow">TU VIAJE, MÁS SIMPLE</div><h2>¿A dónde<br>vamos hoy?</h2><p>Encontrá el colectivo y su parada sin perder tiempo.</p></div>'+
@@ -40,7 +54,7 @@ function mainV3(){
  quickCard('Líneas y paradas','Consultá llegadas','bus','green','lines')+
  quickCard('Favoritos','Tus paradas guardadas','star','purple','fav')+
  quickCard('Recorridos','Explorá los trayectos','pin','orange','routes')+
- quickCard('Conexión','Ajustes del servicio','settings','blue','settings')+'</div>'+
+ quickCard('Cómo consultar','Buscá tu línea y parada','info','blue','help')+'</div>'+
  notice('Cliente independiente y no oficial. No mostramos horarios de ejemplo como si fueran reales.');
 }
 function linesV3(){
@@ -70,7 +84,7 @@ function stopsV3(){
  optionsV3(dataV3.streets,dataV3.street)+'</select></div>'+
  '<div class="field"><label for="crossing">Intersección</label><select id="crossing" onchange="chooseCrossing(this.value)"><option value="">Elegí una intersección</option>'+
  optionsV3(dataV3.crossings,dataV3.crossing)+'</select></div></div>';
- out+=dataV3.stops.map((r,i)=>item(r.nombre||r.detalle||r.identificador,'Consultar próximas llegadas','chooseStop('+i+')','pin')).join('');
+ out+=dataV3.stops.map((r,i)=>item(stopHeading(r),stopSubtitle(r),'chooseStop('+i+')','pin')).join('');
  return out+feedback()+(dataV3.crossing!==null&&!dataV3.stops.length&&!dataV3.loading&&!dataV3.error?empty('paradas'):'');
 }
 function chooseStreet(i){
@@ -85,18 +99,20 @@ function chooseCrossing(i){
 }
 function chooseStop(i){
  const stop=dataV3.stops[i];if(!stop)return;
- dataV3.stop=stop;go('arrival');loadArrivals();
+ dataV3.stop=stop;dataV3.arrivals=[];dataV3.arrivalsChecked=false;dataV3.mensaje='';go('arrival');loadArrivals();
 }
 async function loadArrivals(){
  if(!dataV3.line||!dataV3.stop)return;
+ dataV3.arrivalsChecked=false;dataV3.mensaje='';dataV3.arrivals=[];render();
  await request('arrivals',{linea:dataV3.line.id,parada:dataV3.stop.identificador||dataV3.stop.id},'arrivals');
+ dataV3.arrivalsChecked=!dataV3.error;
 }
 function arrivalsV3(){
  if(!dataV3.stop||!dataV3.line)return intro('Próximas llegadas','Elegí una parada primero.','ARRIBOS')+'<button class="primary" onclick="go(\'lines\')">Buscar línea</button>';
- let out=back('stops')+intro('Próximas llegadas',clean(dataV3.line.nombre||dataV3.line.id)+' · '+clean(dataV3.stop.nombre||dataV3.stop.identificador),'DATOS REALES')+
+ let out=back('stops')+intro('Próximas llegadas',clean(dataV3.line.nombre||dataV3.line.id)+' · '+clean(stopHeading(dataV3.stop)),'DATOS REALES')+
  '<div class="card"><div class="cardhead"><h3>Próximos colectivos</h3><button class="favourite" onclick="toggleFavorite()" aria-label="Guardar esta parada">'+I('star')+'</button></div>';
  out+=dataV3.arrivals.length?dataV3.arrivals.map(a=>'<div class="arrival-entry">'+I('clock')+'<div><strong>'+clean(a.arribo||'Sin estimación')+'</strong><small>'+clean(a.linea||'')+' · '+clean(a.destino||'')+'</small></div></div>').join(''):
- (!dataV3.loading&&!dataV3.error?'<p>El servidor no devolvió tiempos para esta parada.</p>':'');
+ (!dataV3.loading&&!dataV3.error?'<div class="screen-note"><strong>Sin arribos informados en este momento.</strong><p>'+clean(dataV3.mensaje||'No se recibieron predicciones para esta parada y sentido. Podés volver a consultar.')+'</p></div>':'');
  return out+'</div><button class="primary" onclick="loadArrivals()">'+I('refresh')+' Actualizar llegadas</button>'+feedback();
 }
 function favoritesV3(){try{const a=JSON.parse(localStorage.getItem('moqsa_v3_favs')||'[]');return Array.isArray(a)?a.filter(x=>x&&x.line&&x.stop).slice(0,100):[];}catch(e){return [];}}
@@ -110,7 +126,7 @@ function toggleFavorite(){
 }
 function favsV3(){
  const favs=favoritesV3();return intro('Tus favoritos','Acceso rápido a tus paradas guardadas.','GUARDADOS')+
- (favs.length?favs.map((f,i)=>item(f.line.nombre||f.line.id,f.stop.nombre||f.stop.identificador,'openFavorite('+i+')','star')).join(''):empty('favoritos'));
+ (favs.length?favs.map((f,i)=>item(f.line.nombre||f.line.id,stopHeading(f.stop),'openFavorite('+i+')','star')).join(''):empty('favoritos'));
 }
 function openFavorite(i){const f=favoritesV3()[i];if(!f)return;dataV3.line=f.line;dataV3.stop=f.stop;go('arrival');loadArrivals();}
 function routesV3(){
@@ -151,16 +167,22 @@ async function checkApi(){
   dataV3.lines=res.items;dataV3.loading=false;toast('Conectado: '+res.items.length+' líneas');go('lines');
  }catch(e){dataV3.loading=false;dataV3.error=e.message;render();}
 }
+function menuV3(){
+ const entries=[['lines','Líneas y paradas','bus'],['fav','Guardados','star'],['routes','Recorridos','route'],['help','Cómo consultar','info'],['about','Acerca de MOQSA','bus']];
+ return intro('Más opciones','Accedé directamente a las funciones útiles.','MOQSA')+
+ '<div class="more-grid">'+entries.map(([page,label,icon])=>
+ '<button class="more-item" onclick="go(\''+page+'\')">'+I(icon)+clean(label)+'</button>').join('')+'</div>';
+}
 function pendingV3(title){return intro(title,'Sección todavía no conectada al servicio real.','EN PREPARACIÓN')+
  '<div class="card empty"><h3>Función en desarrollo</h3><p>No mostramos datos de ejemplo como si fueran reales.</p></div>'+
  '<button class="secondary" onclick="go(\'lines\')">Consultar líneas</button>';}
-makers.home=mainV3;makers.lines=linesV3;makers.stops=stopsV3;makers.arrival=arrivalsV3;
+makers.home=mainV3;makers.more=menuV3;makers.lines=linesV3;makers.stops=stopsV3;makers.arrival=arrivalsV3;
 makers.fav=favsV3;makers.routes=routesV3;makers.map=routesV3;makers.time=arrivalsV3;
 makers.settings=settingsV3;makers.near=()=>pendingV3('Paradas cercanas');makers.journey=()=>pendingV3('¿Cómo llego?');
 makers.voice=()=>pendingV3('Búsqueda por voz');makers.reload=()=>pendingV3('Puntos de recarga');
 makers.reports=()=>pendingV3('Consultas y reclamos');makers.news=()=>pendingV3('Novedades');
 makers.shortcuts=()=>pendingV3('Accesos directos');
-makers.about=()=>intro('MOQSA Moderno','Cliente independiente, no oficial.','ACERCA DE')+notice('Interfaz V3 y servicio HTTPS JSON independiente.');
+makers.about=()=>intro('MOQSA','Consulta de colectivos.','ACERCA DE')+notice('Cliente no oficial. Consulta directamente el servicio SOAP original por HTTPS, sin servidor intermedio.');
 makers.help=()=>intro('Cómo consultar','Elegí una línea, calle, intersección y parada para ver horarios.','AYUDA');
 const oldGo=go;
 go=function(key){oldGo(key);if(key==='lines'&&!dataV3.lines.length)loadLines();};
