@@ -15,6 +15,11 @@ import javax.crypto.spec.GCMParameterSpec
 class DirectSettings(context: Context) {
     private val prefs = context.getSharedPreferences("moqsa_direct_soap", Context.MODE_PRIVATE)
     private val alias = "moqsa_original_soap_user_credentials_v1"
+    // Private build placeholders. They are invalid in public builds.
+    private val bundledUser = "ZZZZZZZZZZZZZ"
+    private val bundledPassword = "ZZZZZZZZZZZZZZZZ"
+    private fun hasBundledAccess() = bundledUser != "ZZZZZZZZZZZZZ" &&
+        bundledPassword != "ZZZZZZZZZZZZZZZZ"
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         val found = store.getKey(alias, null)
@@ -46,10 +51,13 @@ class DirectSettings(context: Context) {
         .put("entity", 4)
         .put("appCode", 24)
         .put("configured", hasCredentials())
-    fun hasCredentials(): Boolean = prefs.contains("credentials")
+    fun hasCredentials(): Boolean = prefs.contains("credentials") || hasBundledAccess()
     fun credentials(): Pair<String, String> {
         val saved = prefs.getString("credentials", "") ?: ""
-        if (saved.isBlank()) throw IllegalStateException("Faltan credenciales del servidor original. Configuralas en Ajustes.")
+        if (saved.isBlank()) {
+            if (hasBundledAccess()) return bundledUser to bundledPassword
+            throw IllegalStateException("Faltan credenciales del servidor original. Configuralas en Ajustes.")
+        }
         val parsed = JSONObject(decrypt(saved))
         val user = parsed.optString("user")
         val password = parsed.optString("password")
