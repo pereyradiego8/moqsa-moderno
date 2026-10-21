@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const soap=fs.readFileSync('app/src/main/java/ar/com/colectivos/consulta/OriginalSoap.kt','utf8');
+const source=soap.slice(soap.indexOf('"route", "routeStopsMap" -> {'),soap.indexOf('"nearbyArrivals" -> {'));
+assert.ok(source.startsWith('"route", "routeStopsMap" -> {'));
+const a=['params["usuario"] = user','params["clave"] = pass','params["codigoLineaParada"] = required(q, "linea")','params["isSublinea"] = q.optBoolean("isSublinea", false).toString()'];
+for(let i=0;i<a.length-1;i++)assert.ok(source.indexOf(a[i])>=0 && source.indexOf(a[i])<source.indexOf(a[i+1]),'Orden SOAP WSDL '+a[i]);
+assert.match(source,/RecuperarParadasConBanderaYDestinoPorLinea/);
+assert.match(source,/params\["isInteligente"\] = "false"/);
+assert.match(soap,/if \(first != null && hasRouteCoordinates\(first\)\) return first/);
+assert.match(soap,/if \(alternate != null && hasRouteCoordinates\(alternate\)\) return alternate/);
+assert.match(soap,/kind == "route" && !normalized.isNull\("lat"\) && !normalized.isNull\("lon"\)/,'Los puntos sin nombre conservan sus coordenadas');
+assert.match(soap,/4_000_000/);
+assert.match(soap,/\.trim\(\)\?\.replace\(',', '\.'\)/);
+console.log('OK: contrato WSDL, fallback, puntos sin nombre y coordenadas.');

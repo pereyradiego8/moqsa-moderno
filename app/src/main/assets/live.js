@@ -1,11 +1,11 @@
 'use strict';
 /* Nueva experiencia V3: datos de servicio, jamás líneas ni arribos simulados. */
-const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],otherArrivals:[],otherLoading:false,otherNotice:'',otherPartial:false,otherRequestId:0,route:[],routeLine:null,routeQuery:'',routeLoading:false,routeError:'',routeRequestId:0,routeListScroll:0,routeRefreshing:false,routeRefreshStatus:'',routeRefreshError:'',line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearAccuracy:null,nearDiagnostic:null,nearError:'',nearLoading:false,nearStop:null,nearStopArrivals:[],nearStopMessage:'',nearStopError:'',nearStopLoading:false,nearStopPartial:false,nearStopRequestId:0,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
+const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],otherArrivals:[],otherLoading:false,otherNotice:'',otherPartial:false,otherRequestId:0,route:[],routeLine:null,routeQuery:'',routeLoading:false,routeError:'',routeRequestId:0,routeVariant:0,routeMapLoading:false,routeMapError:'',routeListScroll:0,routeRefreshing:false,routeRefreshStatus:'',routeRefreshError:'',line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearAccuracy:null,nearDiagnostic:null,nearError:'',nearLoading:false,nearStop:null,nearStopArrivals:[],nearStopMessage:'',nearStopError:'',nearStopLoading:false,nearStopPartial:false,nearStopRequestId:0,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
 const calls=new Map();let callNo=0;
 function native(action,params={}){
  return new Promise((resolve,reject)=>{
   if(!window.AndroidApi){reject(Error('Abrí el APK Android para realizar consultas reales.'));return;}
-  const id=++callNo,t=setTimeout(()=>{calls.delete(id);reject(Error('Se agotó el tiempo de espera de la consulta.'));},action==="nearby"||action==="nearbyArrivals"?65000:25000);
+  const id=++callNo,t=setTimeout(()=>{calls.delete(id);reject(Error('Se agotó el tiempo de espera de la consulta.'));},action==="nearby"||action==="nearbyArrivals"||action==="route"?85000:25000);
   calls.set(id,{resolve,reject,t});
   try{window.AndroidApi.call(id,action,JSON.stringify(params));}catch(e){clearTimeout(t);calls.delete(id);reject(e);}
  });
@@ -102,25 +102,82 @@ function openNearMap(){
  const stops=geoPoints(dataV3.nearby,x=>stopHeading(x),'stop');
  openMap('stops','Paradas cercanas',[...(me?[me]:[]),...stops]);
 }
-function openRouteMap(){
- const points=geoPoints(dataV3.route,(v,i)=>v.nombre||'Punto '+String(i+1));
- if(!dataV3.routeLine)return;
- openMap('route','Recorrido · '+String(dataV3.routeLine.nombre||dataV3.routeLine.id),points);
+function routeVariants(){
+ const all=(Array.isArray(dataV3.route)?dataV3.route:[])
+   .filter(row=>validGeoPoint(row,row?.nombre||'', 'route'));
+ if(!all.length)return [];
+ const groups=new Map();
+ for(const row of all){
+  const key=String(row.nombre||'').trim();
+  if(!groups.has(key))groups.set(key,[]);
+  groups.get(key).push(row);
+ }
+ const entries=[...groups.entries()];
+ // El SOAP suele separar los ramales en Descripcion; no unir ida y vuelta.
+ if(entries.length>1 && entries.length<=20 && entries.some(([name])=>name)){
+  return entries.map(([name,points],i)=>({
+   label:name.split(';').slice(1).join(' · ').trim()||name.split(';')[0].trim()||'Ramal '+(i+1),
+   points
+  }));
+ }
+ return [{label:'Recorrido',points:all}];
+}
+function chooseRouteVariant(index){
+ const variants=routeVariants();
+ const i=Number(index);
+ if(!Number.isInteger(i)||i<0||i>=variants.length)return;
+ dataV3.routeVariant=i;dataV3.routeMapError='';
+ render();routeScrollToTop();
+}
+function routeMapPoints(){
+ const selected=routeVariants()[dataV3.routeVariant];
+ if(!selected)return [];
+ const all=selected.points;
+ const count=Math.min(650,all.length);
+ const points=[];
+ for(let i=0;i<count;i++){
+  const index=count===1?0:Math.round(i*(all.length-1)/(count-1));
+  const row=all[index];
+  const p=validGeoPoint(row,row.nombre||'Punto '+String(index+1),'route');
+  if(p){p.nombre=p.nombre.slice(0,45);points.push(p);}
+ }
+ return points;
+}
+async function openRouteMap(){
+ if(dataV3.routeMapLoading||!dataV3.routeLine)return;
+ const points=routeMapPoints();
+ if(!points.length){
+  dataV3.routeMapError='El servicio todavía no informó coordenadas para este trayecto.';
+  render();return;
+ }
+ dataV3.routeMapLoading=true;dataV3.routeMapError='';render();
+ const branch=routeVariants()[dataV3.routeVariant];
+ const title='Recorrido · '+String(dataV3.routeLine.nombre||dataV3.routeLine.id)+
+  (routeVariants().length>1?' · '+branch.label:'');
+ try{
+  await native('map.show',{type:'route',title,points});
+ }catch(e){
+  dataV3.routeMapError='No se pudo abrir el mapa. Probá nuevamente.';
+ }finally{
+  dataV3.routeMapLoading=false;
+  if(screen==='routes'&&dataV3.routeLine)render();
+ }
 }
 async function loadRoute(){
  const selected=dataV3.routeLine;
  if(!selected)return;
  const requestId=++dataV3.routeRequestId;
- dataV3.route=[];dataV3.routeLoading=true;dataV3.routeError='';
+ dataV3.route=[];dataV3.routeVariant=0;dataV3.routeLoading=true;dataV3.routeError='';dataV3.routeMapError='';
  render();
  try{
-  const response=await native('route',{linea:selected.id});
+  const response=await native('route',{linea:selected.id,isSublinea:Boolean(selected.isSublinea)});
   if(requestId!==dataV3.routeRequestId||dataV3.routeLine?.id!==selected.id)return;
-  if(!response||!Array.isArray(response.items))throw Error('Recorrido no disponible');
+  if(!response||!Array.isArray(response.items))throw Error('Respuesta inválida');
   dataV3.route=response.items;
+  if(!routeVariants().length) dataV3.routeError='Esta línea no tiene puntos de mapa disponibles en el servicio. Podés reintentar.';
  }catch(e){
   if(requestId!==dataV3.routeRequestId||dataV3.routeLine?.id!==selected.id)return;
-  dataV3.routeError=e.message||'No se pudo consultar el recorrido';
+  dataV3.routeError='No pudimos recuperar el recorrido desde el servicio. Intentá nuevamente.';
  }
  dataV3.routeLoading=false;
  render();
@@ -359,14 +416,16 @@ function chooseRouteLine(i){
  dataV3.routeRequestId++;
  dataV3.routeListScroll=typeof root!=='undefined'&&root?root.scrollTop:0;
  dataV3.routeLine=selected;
- dataV3.route=[];dataV3.routeLoading=false;dataV3.routeError='';
+ dataV3.route=[];dataV3.routeLoading=false;dataV3.routeError='';dataV3.routeMapError='';
+ dataV3.routeVariant=0;
  render();
  routeScrollToTop();
  void loadRoute();
 }
 function backToRouteLines(){
  dataV3.routeRequestId++;
- dataV3.routeLine=null;dataV3.route=[];dataV3.routeLoading=false;dataV3.routeError='';
+ dataV3.routeLine=null;dataV3.route=[];dataV3.routeLoading=false;dataV3.routeError='';dataV3.routeMapError='';
+ dataV3.routeVariant=0;
  render();
  if(typeof root!=='undefined'&&root)root.scrollTop=dataV3.routeListScroll||0;
 }
@@ -405,16 +464,27 @@ function routesV3(){
  let out=back('home')+
   intro('Recorridos','Elegí una línea para consultar su trayecto en el mapa.','RECORRIDOS');
  if(dataV3.routeLine){
-  const coords=geoPoints(dataV3.route,(v,i)=>v.nombre||'Punto '+String(i+1));
+  const variants=routeVariants();
   out+='<div class="card route-detail" aria-live="polite"><div class="cardhead"><h3>Recorrido · '+
    clean(dataV3.routeLine.nombre||dataV3.routeLine.id)+'</h3></div>';
-  if(dataV3.routeLoading)out+='<p class="route-loading">Consultando recorrido…</p>';
-  else if(dataV3.routeError)out+='<p class="route-error">No pudimos obtener el recorrido de esta línea. Intentá nuevamente.</p>';
-  else if(coords.length)out+='<p>Recorrido disponible. Tocá para verlo en el mapa.</p>'+
-   '<button class="primary map-action" onclick="openRouteMap()">'+I('pin')+' Abrir mapa interactivo</button>';
-  else out+='<p>No recibimos un trayecto con coordenadas para esta línea.</p>';
-  out+='<button class="secondary" onclick="loadRoute()" '+
-   (dataV3.routeLoading?'disabled':'')+'>'+I('refresh')+' Reintentar consulta</button></div>'+
+  if(dataV3.routeLoading)out+='<p class="route-loading">Consultando el recorrido…</p>';
+  else if(dataV3.routeError)out+='<p class="route-error">'+clean(dataV3.routeError)+'</p>';
+  else if(variants.length){
+   if(variants.length>1){
+    out+='<p>Elegí el ramal o sentido para ver su trazado.</p><div class="route-variants" role="group" aria-label="Ramal del recorrido">';
+    out+=variants.map((r,i)=>'<button class="chip '+(dataV3.routeVariant===i?'selected':'')+
+     '" onclick="chooseRouteVariant('+i+')" aria-pressed="'+(dataV3.routeVariant===i?'true':'false')+'">'+
+     clean(r.label)+'</button>').join('')+'</div>';
+   }
+   const current=variants[dataV3.routeVariant]||variants[0];
+   out+='<p>'+current.points.length+' puntos geográficos disponibles.</p>'+
+    '<button class="primary map-action" onclick="openRouteMap()" '+
+    (dataV3.routeMapLoading?'disabled':'')+'>'+I('pin')+
+    (dataV3.routeMapLoading?' Abriendo mapa…':' Abrir mapa interactivo')+'</button>';
+  }else out+='<p>Esta línea no tiene un trayecto geográfico disponible por ahora.</p>';
+  if(dataV3.routeMapError)out+='<p class="route-error" role="alert">'+clean(dataV3.routeMapError)+'</p>';
+  out+='<button class="secondary" onclick="loadRoute()" '+(dataV3.routeLoading?'disabled':'')+'>'+
+   I('refresh')+' Reintentar consulta</button></div>'+
    '<button class="secondary route-change" onclick="backToRouteLines()">'+I('back')+' Elegir otra línea</button>';
   return out;
  }
@@ -679,7 +749,7 @@ go=function(key){
  if(destination==='routes'){
   dataV3.routeRequestId++;
   dataV3.routeLine=null;dataV3.routeQuery='';dataV3.route=[];
-  dataV3.routeLoading=false;dataV3.routeError='';
+  dataV3.routeLoading=false;dataV3.routeError='';dataV3.routeVariant=0;dataV3.routeMapError='';
  }
  navTrail.push(screen);
  if(navTrail.length>MAX_NAV_TRAIL)navTrail.shift();

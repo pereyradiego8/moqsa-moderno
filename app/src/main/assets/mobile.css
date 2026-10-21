@@ -104,3 +104,70 @@ button{touch-action:manipulation}
  .arrival-highlight{grid-template-columns:160px minmax(0,1fr)}
  .eta-number{font-size:52px}
 }
+
+/* Base adaptativa común: pantallas estrechas, tablets, giro y fuente ampliada. */
+html,body,.stage,.phone{max-width:100%;max-width:100vw}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+.phone,.content,.topbar,.bottom,.card,.row,.meta{min-width:0}
+.content{overscroll-behavior-y:contain;overflow-x:hidden;padding-left:clamp(10px,3.7vw,24px);padding-right:clamp(10px,3.7vw,24px)}
+.topbar{min-width:0;gap:clamp(5px,2vw,12px)}
+.brand,.brand-name,.topbar>div{min-width:0}
+.section-intro,.section-intro p,.headrow,.meta,.notice,.cardhead{max-width:100%;overflow-wrap:anywhere}
+.cardhead{flex-wrap:wrap}
+.row{width:100%;min-width:0;gap:clamp(8px,2.5vw,13px)}
+.row .meta{flex:1 1 auto;overflow-wrap:anywhere}
+.row .glyph{flex:0 0 auto}
+.quick-grid>*{min-width:0}
+.quick-card h3,.quick-card p,.quick-card strong{overflow-wrap:anywhere}
+.field,.search-bar,.search-bar input,.field select,.field input{min-width:0;max-width:100%}
+input,select,textarea,button{font-family:inherit}
+.primary,.secondary,.hero-cta{min-height:46px;white-space:normal;line-height:1.3}
+.bottom{padding-left:max(5px,env(safe-area-inset-left));padding-right:max(5px,env(safe-area-inset-right));gap:0}
+.nav-btn{min-width:0;padding-left:2px;padding-right:2px;line-height:1.25}
+.nav-btn span{overflow-wrap:anywhere}
+.arrival-panel .cardhead h3{font-size:clamp(17px,4.5vw,21px)!important}
+.arrival-highlight{grid-template-columns:minmax(100px,33%) minmax(0,1fr);align-items:start}
+.arrival-eta{width:100%;align-self:stretch}
+.eta-number{font-variant-numeric:tabular-nums;font-size:clamp(30px,10vw,50px)}
+.eta-other{font-size:clamp(13px,3.8vw,17px);overflow-wrap:anywhere}
+.arrival-details{align-self:center}
+.other-arrival-time{flex-shrink:0;max-width:46%}
+.other-arrival-time .other-eta-number{font-variant-numeric:tabular-nums}
+.route-variants{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0;max-width:100%}
+.route-variants .chip{min-height:44px;max-width:100%;white-space:normal;overflow-wrap:anywhere;text-align:center}
+.route-detail .map-action{width:100%;white-space:normal}
+@media(max-width:420px){
+ .content{padding-left:12px;padding-right:12px}
+ .topbar{padding:8px 12px}
+ .brand-symbol{flex-shrink:0}
+ .section-intro p{line-height:1.45}
+ .row{padding:12px 10px}
+ .arrival-panel{padding:12px!important}
+ .arrival-highlight{grid-template-columns:minmax(92px,32%) minmax(0,1fr);gap:9px;padding:13px 0}
+ .arrival-eta{padding:11px 7px;min-height:98px}
+ .arrival-line{font-size:clamp(15px,4.3vw,19px)}
+ .arrival-destination{font-size:clamp(13px,3.5vw,16px)}
+ .other-arrival-item{gap:9px}
+ .other-arrival-details strong{font-size:clamp(15px,4.2vw,18px)}
+ .other-arrival-time{min-width:0;max-width:44%}
+ .other-arrival-time span{font-size:11px}
+}
+@media(max-width:330px){
+ .arrival-highlight{grid-template-columns:1fr;gap:9px}
+ .arrival-eta{min-height:0;flex-direction:row;align-items:center;justify-content:flex-start;gap:7px;flex-wrap:wrap;padding:9px 11px}
+ .eta-number{font-size:34px}
+ .eta-unit{font-size:13px}
+ .arrival-details{width:100%}
+ .other-arrival-time{max-width:45%}
+ .nav-btn{font-size:9px}
+}
+@media(min-width:620px){
+ .arrival-highlight{grid-template-columns:160px minmax(0,1fr)}
+ .content{padding-left:clamp(20px,6vw,64px);padding-right:clamp(20px,6vw,64px)}
+}
+@media(max-height:480px) and (orientation:landscape){
+ .topbar{min-height:47px;padding-top:5px;padding-bottom:5px}
+ .bottom{min-height:48px;padding-bottom:env(safe-area-inset-bottom)}
+ .nav-btn{min-height:40px}
+ .content{padding-bottom:15px}
+}

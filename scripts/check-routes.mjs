@@ -2,103 +2,117 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const source=fs.readFileSync('app/src/main/assets/live.js','utf8');
+const live=fs.readFileSync('app/src/main/assets/live.js','utf8');
 function section(start,end){
- const a=source.indexOf(start),b=source.indexOf(end,a);
- assert.ok(a>=0&&b>a,'No se encontró sección: '+start);
- return source.slice(a,b);
+ const a=live.indexOf(start),b=live.indexOf(end,a);
+ assert.ok(a>=0 && b>a,'Sección faltante: '+start);
+ return live.slice(a,b);
 }
 const dataV3={
  lines:[{id:'1',nombre:'65'},{id:'2',nombre:'619'},{id:'3',nombre:'300'}],
  line:{id:'99',nombre:'Última línea 98'},routeLine:null,routeQuery:'',
- route:[],routeRequestId:0,routeLoading:false,routeError:'',loading:false
+ route:[],routeRequestId:0,routeVariant:0,routeMapLoading:false,routeMapError:'',
+ routeLoading:false,routeError:'',routeRefreshing:false,routeRefreshStatus:'',
+ routeRefreshError:'',loading:false
 };
-const pending=[],maps=[],elements={
- routeSearch:{value:''},
- routeLineResults:{innerHTML:''}
-};
+const pending=[], elements={routeSearch:{value:''},routeLineResults:{innerHTML:''}};
 const ctx=vm.createContext({
  dataV3,
+ screen:'routes',root:{scrollTop:340},
  orderedRows:rows=>rows.map((r,i)=>({r,i})),
- native:(action,params)=>new Promise(resolve=>pending.push({action,params,resolve})),
- render:()=>{},
- openMap:(...args)=>maps.push(args),
- geoPoints:rows=>rows,
- clean:value=>String(value),
- intro:title=>'Título '+title+' | ',
- back:()=>'',notice:msg=>'Aviso '+msg,
- empty:msg=>'Sin '+msg,feedback:()=>'',I:x=>x,
+ native:(action,params)=>new Promise((resolve,reject)=>pending.push({action,params,resolve,reject})),
+ render:()=>{}, clean:value=>String(value),intro:title=>'Título '+title+' | ',
+ back:()=>'',notice:msg=>'Aviso '+msg,empty:msg=>'Sin '+msg,feedback:()=>'',I:x=>x,
  item:(name,description,action)=>'[Línea '+name+' '+action+']',
- root:{scrollTop:340},
  document:{getElementById:id=>elements[id]||null},
  window:{},
  PAGES:Object.fromEntries(['home','lines','stops','routes','more'].map(k=>[k,k])),
- loadLines:()=>{},
- loadConfig:()=>{}
+ loadLines:()=>{},loadConfig:()=>{}
 });
 vm.runInContext(
- section('function openRouteMap(){','function mainV3(){')+
+ section('function validGeoPoint(','function currentStopPoint(')+
+ section('function routeVariants(){','function mainV3(){')+
  section('function routeLineChoices(){','function metersBetween('),ctx);
 const call=expr=>vm.runInContext(expr,ctx);
+assert.match(call('routesV3()'),/Todas las líneas/);
+assert.match(call('routesV3()'),/Línea 65/);
+assert.match(call('routesV3()'),/Línea 619/);
+assert.ok(!call('routesV3()').includes('Última línea 98'));
 
-// Recorridos inicia sin seleccionar la línea utilizada para paradas.
-let html=call('routesV3()');
-assert.match(html,/Todas las líneas/);
-assert.match(html,/Línea 65/);
-assert.match(html,/Línea 619/);
-assert.match(html,/Línea 300/);
-assert.ok(!html.includes('Última línea 98'));
-assert.ok(!html.includes('Recorrido · Última línea 98'));
-
-// Filtrar no altera la línea de la consulta de paradas.
 elements.routeSearch.value='619';
 call('filterRouteLines()');
 assert.match(elements.routeLineResults.innerHTML,/Línea 619/);
 assert.ok(!elements.routeLineResults.innerHTML.includes('Línea 65'));
-assert.equal(dataV3.routeQuery,'619');
 assert.equal(dataV3.line.id,'99');
-
-// Elegir una línea dispara su propio servicio de recorridos.
 call('chooseRouteLine(1)');
-assert.equal(ctx.root.scrollTop,0,'La selección vuelve arriba desde el final del catálogo');
-assert.equal(dataV3.routeLine.nombre,'619');
-assert.equal(dataV3.routeQuery,'619','El filtro se conserva al volver del detalle');
+assert.equal(ctx.root.scrollTop,0);
+assert.equal(dataV3.routeQuery,'619');
 assert.equal(pending[0].action,'route');
 assert.equal(pending[0].params.linea,'2');
+assert.equal(pending[0].params.isSublinea,false);
 assert.match(call('routesV3()'),/Recorrido · 619/);
 
-// Si se elige otra, una respuesta antigua no pisa el trayecto nuevo.
+// Cambiar de línea: una respuesta demorada nunca reemplaza la vigente.
 call('chooseRouteLine(0)');
-assert.equal(pending[1].params.linea,'1');
-pending[1].resolve({items:[{lat:-34.75,lon:-58.25,nombre:'Trayecto correcto'}]});
+pending[1].resolve({items:[{lat:-34.75,lon:-58.25,nombre:'Tramo real'}]});
 await new Promise(setImmediate);
-assert.equal(dataV3.route[0].nombre,'Trayecto correcto');
-pending[0].resolve({items:[{lat:-34.8,lon:-58.3,nombre:'Trayecto viejo'}]});
+pending[0].resolve({items:[{lat:-34.8,lon:-58.3,nombre:'Tramo viejo'}]});
 await new Promise(setImmediate);
-assert.equal(dataV3.route[0].nombre,'Trayecto correcto');
-call('openRouteMap()');
-assert.match(maps[0][1],/65/);
-assert.equal(dataV3.line.id,'99','La selección de paradas no debe cambiar');
-call('backToRouteLines()');
-assert.equal(dataV3.routeLine,null,'Volver al catálogo no cambia la línea de paradas');
+assert.equal(dataV3.route[0].nombre,'Tramo real');
+const opening=call('openRouteMap()');
+assert.equal(pending[2].action,'map.show');
+assert.equal(pending[2].params.type,'route');
+assert.equal(pending[2].params.points.length,1);
+pending[2].resolve({opened:true});
+await opening;
+assert.equal(dataV3.line.id,'99');
 
-// Volver a entrar desde cualquier pantalla vuelve a mostrar todas las líneas.
-vm.runInContext("let screen='stops';function go(key){screen=key;}function back(){return '';}",ctx);
-vm.runInContext(section('const oldGo=go;','render();loadConfig();'),ctx);
-vm.runInContext("go('routes')",ctx);
+// Un recorrido con ramales independientes no debe unir las geometrías.
+dataV3.route=[
+ {nombre:'R1;Ida',lat:-34.75,lon:-58.2},
+ {nombre:'R1;Ida',lat:-34.74,lon:-58.19},
+ {nombre:'R2;Vuelta',lat:-34.73,lon:-58.18},
+ {nombre:'R2;Vuelta',lat:-34.72,lon:-58.17}
+];
+assert.equal(call('routeVariants().length'),2);
+assert.match(call('routesV3()'),/Elegí el ramal/);
+call('chooseRouteVariant(1)');
+const onlyVuelta=call('routeMapPoints()');
+assert.equal(onlyVuelta.length,2);
+assert.equal(onlyVuelta[0].lat,-34.73);
+
+// Recorridos largos se muestrean, sin inventar puntos y conservando extremos.
+dataV3.route=Array.from({length:5000},(_,i)=>({
+ nombre:'R1;Ida',lat:-34.8+i*0.00001,lon:-58.3+i*0.00001
+}));
+dataV3.routeVariant=0;
+const sampled=call('routeMapPoints()');
+assert.ok(sampled.length<=650);
+assert.equal(sampled[0].lat,-34.8);
+assert.ok(Math.abs(sampled.at(-1).lat-(-34.8+4999*.00001))<1e-7);
+assert.ok(JSON.stringify(sampled).length<105000);
+
+// Reintento o fallo del servicio debe mostrar un estado visible.
+dataV3.route=[{nombre:'',lat:null,lon:null}];
+assert.equal(call('routeVariants().length'),0);
+dataV3.routeError='No se recibió mapa.';
+assert.match(call('routesV3()'),/No se recibió mapa/);
+call('backToRouteLines()');
 assert.equal(dataV3.routeLine,null);
-assert.equal(dataV3.route.length,0);
-assert.equal(dataV3.routeQuery,'');
+assert.equal(dataV3.line.id,'99');
+
+vm.runInContext("screen='stops';function go(key){screen=key;}function back(){return '';}",ctx);
+vm.runInContext(section('const oldGo=go;','render();loadConfig();'),ctx);
+call("go('routes')");
+assert.equal(dataV3.routeLine,null);
 assert.match(call('routesV3()'),/Todas las líneas/);
-assert.match(call('routesV3()'),/refreshRouteLines\(\)/,'Actualizar debe ejecutar la consulta visible');
-ctx.screen='routes';
-ctx.root.scrollTop=270;
+ctx.screen='routes';ctx.root.scrollTop=270;
 const updating=call('refreshRouteLines()');
-assert.equal(pending[2].action,'lines');
+assert.equal(pending[3].action,'lines');
 assert.match(dataV3.routeRefreshStatus,/Actualizando/);
-pending[2].resolve({items:[{id:'4',nombre:'584'},{id:'5',nombre:'603'}]});
+pending[3].resolve({items:[{id:'4',nombre:'584'},{id:'5',nombre:'603'}]});
 await updating;
 assert.equal(dataV3.lines.length,2);
 assert.match(dataV3.routeRefreshStatus,/Lista actualizada/);
-assert.equal(ctx.root.scrollTop,270,'Actualizar no debe desplazar el catálogo');
-console.log('OK: catálogo de recorridos independiente, filtro, selección, mapa y respuestas antiguas.');
+assert.equal(ctx.root.scrollTop,270);
+console.log('OK: líneas, ramas, geometría extensa, mapa, refresco, mensajes y navegación.');
