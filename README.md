@@ -47,3 +47,14 @@ Se eliminó ese fallback en Kotlin y en la interfaz. Si la consulta de paradas n
 También se retiró el control de referencia `línea 77 / MO-01080`, que correspondía a otra línea distinta de la 300 (código interno 84) de la captura y no servía para comparar la misma consulta. El diagnóstico muestra solo línea, código de registro e identificador de la parada seleccionados, sin secretos.
 
 **Pendiente:** todavía no se ha demostrado que todas las paradas devuelvan predicciones. Verificar los campos y los arribos reales con el APK nuevo antes de declarar el problema resuelto.
+
+## Mapas y legibilidad — versión 0.4 beta
+
+- Se agregó un visor cartográfico nativo con osmdroid y teselas de OpenStreetMap (requiere Internet). El backend de datos de transporte **continúa siendo el SOAP original**.
+- Desde **Paradas** se puede abrir el mapa de paradas cuando existen coordenadas, o ir a **Recorridos** para consultar el trazado de la línea y mostrarlo en un mapa con desplazamiento y zoom.
+- Desde **Próximas llegadas**, cuando el SOAP facilita coordenadas, se pueden ubicar la parada y las posiciones informadas de los colectivos. No se inventan ubicaciones ni trayectos.
+- Los tiempos de llegada, número de línea y destino tienen tarjetas más grandes y mayor contraste.
+- **Cómo consultar** ahora explica cómo elegir línea, calle, cruce, sentido, actualizar estimaciones, usar Guardados e interpretar mensajes y mapas.
+- Los mapas usan únicamente coordenadas reales presentes en la respuesta SOAP. Si el servicio carece de ellas, la aplicación lo informa. OpenStreetMap suministra solo el fondo cartográfico, no las llegadas.
+- El botón **Cerca** y algunas funciones no relacionadas con mapas siguen pendientes; no mostrar información falsa.
+- La incorporación de osmdroid requiere validar nueva compilación Android y arranque. Conservar la APK anterior que ya devuelve arribos correctos hasta probar esta versión.
