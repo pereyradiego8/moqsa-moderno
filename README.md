@@ -87,3 +87,22 @@ La APK original **no tenía la función Cerca**; se trata de una función nueva,
 - Si una empresa no responde, la app señala resultados parciales. Si el servidor no informa predicciones o faltan campos de ubicación, lo muestra sin inventar tiempos.
 - La consulta de arribos tradicionales por línea y el comportamiento de Guardados no se alteraron.
 - **Limitación pendiente de verificar en teléfono:** que el método adicional responda con la lista de líneas y las direcciones necesarias en cada parada; el contrato WSDL y la compilación no garantizan la disponibilidad real de datos de esa API.
+
+
+## Firma permanente y actualizaciones (21/10/2026)
+
+Desde la nueva APK base de **Recorridos (versionCode 7)** se utiliza una firma permanente propia. La firma SHA-256 del certificado es:
+
+`77:8F:08:3A:E7:B8:B6:81:1D:A0:B3:DD:15:C2:C8:66:91:6D:8B:54:65:CC:C9:4E:16:64:45:B9:0F:F4:62:86`.
+
+Las APK anteriores (04–07), así como las APK de prueba `moqsa-directo-debug`, usan otros certificados: **no pueden actualizarse directamente** a esta base. Requieren una única reinstalación, previa copia de los datos importantes si fuera posible.
+
+La clave privada PKCS#12 se entrega al propietario por separado y **nunca se sube al repositorio público**. Para que GitHub Actions genere artefactos `moqsa-actualizacion-firmada`, el propietario debe registrar estos secretos de Actions en el repositorio:
+
+- `MOQSA_KEYSTORE_B64`: contenido base64 de la clave PKCS#12 (sin saltos de línea).
+- `MOQSA_KEYSTORE_PASSWORD`: contraseña del almacén.
+- `MOQSA_KEY_PASSWORD`: contraseña de la clave.
+
+El alias del almacén es `moqsa-actualizaciones`. El archivo de clave y sus contraseñas deben almacenarse como respaldo privado seguro.
+
+La compilación genera el artefacto firmado solo cuando existen los secretos y valida la firma con `apksigner verify`. Si faltan, publica **solo una APK debug que no sirve para actualizar** la base instalada; nunca distribuir ese archivo como actualización. Cada nueva versión debe usar la misma clave, el mismo `applicationId` y un `versionCode` mayor al instalado. En `main` quedó reservado `versionCode = 8` para la siguiente actualización.
