@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+
+const src=fs.readFileSync('app/src/main/assets/live.js','utf8');
+const soap=fs.readFileSync('app/src/main/java/ar/com/colectivos/consulta/OriginalSoap.kt','utf8');
+const css=fs.readFileSync('app/src/main/assets/mobile.css','utf8');
+
+assert.ok(src.includes("go('nearStop')"),'Cerca debe abrir la parada específica');
+assert.ok(!src.includes("toast('El servicio no informó línea y parada suficientes para consultar arribos. Elegí una línea.')"));
+assert.ok(src.includes("PAGES.nearStop='Detalle de parada'"));
+assert.ok(src.includes('makers.nearStop=nearbyStopV3'));
+assert.ok(src.includes("native('nearbyArrivals',{parada:ident})"),'La consulta no debe exigir línea');
+assert.ok(!src.includes("native('nearbyArrivals',{parada:ident,linea:"),'Sin filtro de línea');
+assert.ok(src.includes("function nearArrivalCard(a,i)") && src.includes('Línea no informada'));
+assert.ok(soap.includes('"nearbyArrivals" -> arrayOf') || soap.includes('"arrivals","nearbyArrivals" -> arrayOf'));
+assert.ok(soap.includes('operation = "RecuperarProximosArribosParaParadasCercanas"'));
+assert.ok(soap.includes('params["identificadorParada"] = required(q, "parada")'));
+assert.ok(soap.includes('params["listaCodigosEmpresas"] = companyCode'));
+assert.ok(soap.includes('params["isSublinea"] = "false"'));
+assert.ok(soap.includes('params["isSoloAdaptados"] = "false"'));
+assert.ok(soap.includes('normalized.put("callePrincipal",first)'));
+assert.ok(soap.includes('normalized.put("cruce2"'));
+assert.ok(soap.includes('normalized.put("identificador",identificadorOriginal)'));
+assert.ok(soap.includes('previousCompanies.addAll(currentKeys)'));
+assert.ok(!soap.includes('params["codigoLineaParada"] = required(q, "linea")') || soap.includes('"arrivals" ->'));
+const a=src.indexOf('function nearbyStopLocation(stop){');
+const b=src.indexOf('async function loadNearStopArrivals(){',a);
+assert.ok(a>=0&&b>a,'Helpers de dirección y orden temporal');
+const ctx=vm.createContext({});
+vm.runInContext(src.slice(a,b),ctx);
+function run(cmd){return vm.runInContext(cmd,ctx);}
+const withCross=run("nearbyStopLocation({callePrincipal:'Maipú',cruce1:'Corrientes',cruce2:'Sarmiento',altura:'272',identificador:'MO-01080'})");
+assert.equal(withCross.street,'Maipú');
+assert.equal(withCross.details,'Entre Corrientes y Sarmiento');
+assert.equal(withCross.at,'Altura 272');
+const one=run("nearbyStopLocation({callePrincipal:'Calle 24',cruce1:'Calle 142'})");
+assert.equal(one.details,'Cruce con Calle 142');
+const unidentified=run("nearbyStopLocation({nombre:'MO-01574',identificador:'MO-01574'})");
+assert.equal(unidentified.street,'Calle no informada');
+assert.equal(unidentified.details,'Intersecciones no informadas por el servicio');
+const ordered=run("nearStopArrivalsSorted([{linea:'300',arribo:'24 min. aprox.'},{linea:'159',arribo:'4 min. aprox.'},{linea:'372',arribo:'9 min. aprox.'}]).map(x=>x.linea).join(',')");
+assert.equal(ordered,'159,372,300');
+assert.ok(src.includes('nearStopArrivals.map(nearArrivalCard)'));
+assert.ok(css.includes('.arrival-highlight'),'Conservar tarjetas ETA adaptables');
+console.log('OK: parada directa, dirección con cruces, 3 líneas y ETAs, SOAP sin línea preseleccionada.');
