@@ -292,7 +292,7 @@ function arrivalsV3(){
  '<div class="card arrival-panel"><div class="cardhead"><h3>Próximos colectivos</h3><button class="favourite" onclick="toggleFavorite()" aria-label="Guardar esta parada">'+I('star')+'</button></div>';
  out+=dataV3.arrivals.length
  ? dataV3.arrivals.map(arrivalCard).join('')
- :(!dataV3.loading&&!dataV3.error?'<div class="screen-note"><strong>Sin estimaciones disponibles ahora.</strong><p>'+clean(dataV3.mensaje||'El servidor no envió tiempos para esta parada. Podés intentar de nuevo en unos minutos.')+'</p></div>':'');
+ :(!dataV3.loading&&!dataV3.error?'<div class="screen-note"><strong>Sin estimaciones disponibles ahora.</strong><p>Volvé a consultar en unos minutos.</p></div>':'');
  out+='</div>';
  out+='<div class="card arrival-panel other-lines-panel"><div class="cardhead"><h3>Otras líneas en esta parada</h3></div>';
  if(dataV3.otherArrivals.length)out+=dataV3.otherArrivals.map(otherArrivalCard).join('');
