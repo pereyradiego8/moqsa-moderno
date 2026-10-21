@@ -1,0 +1,27 @@
+name: Exportar herramientas Android de firma
+on:
+  push:
+    paths: ['.github/workflows/export-signing-tools.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: SDK de Android
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)
+          "$SDKMANAGER" --install 'build-tools;35.0.0'
+          mkdir -p /tmp/apktools
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" /tmp/apktools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" /tmp/apktools/
+          chmod +x /tmp/apktools/zipalign
+          test -s /tmp/apktools/apksigner.jar
+          test -s /tmp/apktools/zipalign
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-signing-tools
+          path: /tmp/apktools/
+          retention-days: 1
