@@ -66,3 +66,41 @@ button{touch-action:manipulation}
 .other-arrival-time span{font-size:12px;font-weight:750}
 .other-eta-description{font-size:13px;line-height:1.25;overflow-wrap:anywhere}
 @media(max-width:355px){.other-arrival-item{gap:8px}.other-arrival-time{min-width:79px;padding:7px}.other-arrival-details strong{font-size:16px}}
+
+
+/* Ajustes de respuesta táctil: recorridos conserva la lista de todas las líneas. */
+.route-line-list .row{min-height:60px;max-width:100%;touch-action:manipulation}
+.route-line-list .meta{min-width:0}
+.route-line-list .meta strong,.route-line-list .meta span{overflow-wrap:anywhere}
+.route-detail{scroll-margin-top:12px}
+.route-detail .cardhead h3{font-size:clamp(18px,4.9vw,22px);line-height:1.3;overflow-wrap:anywhere}
+.route-detail>p{font-size:clamp(14px,3.8vw,16px);line-height:1.5}
+.route-change{display:flex;gap:9px;align-items:center;justify-content:center;width:100%;min-height:48px}
+.route-feedback{min-height:20px;margin:9px 3px 13px;font-size:13px;line-height:1.45;color:#3c7067}
+.route-error{color:#a04432!important}
+.route-loading{color:#176c59}
+#refreshRouteLines:disabled,.route-detail button:disabled{opacity:.63}
+/* Evitar cortes de textos y controles en pantallas pequeñas o fuente ampliada. */
+.card,.row,.arrival-panel,.other-lines-panel{min-width:0;max-width:100%}
+.arrival-highlight{grid-template-columns:minmax(0,clamp(94px,30%,130px)) minmax(0,1fr);gap:clamp(9px,3vw,15px)}
+.arrival-eta{min-width:0;max-width:100%;min-height:100px;padding:12px 9px}
+.eta-number{font-size:clamp(31px,9vw,48px)}
+.arrival-details,.other-arrival-details{min-width:0;overflow-wrap:anywhere}
+.arrival-line{font-size:clamp(16px,4.2vw,22px)}
+.arrival-destination{font-size:clamp(13px,3.5vw,18px)}
+.other-arrival-time{min-width:0;flex:0 0 auto;max-width:44%}
+.other-arrival-item{align-items:center;min-width:0}
+.primary,.secondary{max-width:100%;overflow-wrap:anywhere}
+@media(max-width:360px){
+ .arrival-panel{padding:12px!important}
+ .arrival-highlight{grid-template-columns:minmax(88px,32%) minmax(0,1fr);gap:9px}
+ .eta-number{font-size:clamp(29px,9vw,37px)}
+ .arrival-eta{padding:10px 7px;min-height:96px}
+ .arrival-destination{font-size:13px}
+ .other-arrival-item{gap:8px}
+ .other-arrival-time{max-width:40%;padding:7px}
+}
+@media(min-width:620px){
+ .arrival-highlight{grid-template-columns:160px minmax(0,1fr)}
+ .eta-number{font-size:52px}
+}
