@@ -72,6 +72,28 @@ class MainActivity : Activity() {
                         "health" -> JSONObject()
                             .put("configured", directSettings.hasCredentials())
                             .put("service", "SOAP original de MOQSA")
+                        "map.show" -> {
+                            val points = args.optJSONArray("points")
+                                ?: throw IllegalArgumentException("No se recibieron coordenadas")
+                            if (points.length() < 1 || points.length() > 1200)
+                                throw IllegalArgumentException("Cantidad de puntos inválida")
+                            val kind = args.optString("type")
+                            if (kind != "route" && kind != "stops")
+                                throw IllegalArgumentException("Tipo de mapa desconocido")
+                            val title = args.optString("title", "Mapa MOQSA").take(110)
+                            val raw = points.toString()
+                            if (raw.length > 105_000) throw IllegalArgumentException("Mapa demasiado grande")
+                            runOnUiThread {
+                                if (!isFinishing && !isDestroyed) {
+                                    startActivity(Intent(this@MainActivity, MapActivity::class.java).apply {
+                                        putExtra("map_title", title)
+                                        putExtra("map_type", kind)
+                                        putExtra("map_points", raw)
+                                    })
+                                }
+                            }
+                            JSONObject().put("opened", true)
+                        }
                         else -> directSoap.execute(action, args)
                     }
                     JSONObject().put("ok", true).put("data", value)
