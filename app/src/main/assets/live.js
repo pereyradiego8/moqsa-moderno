@@ -293,6 +293,71 @@ function routesV3(){
  }
  return out+feedback()+(dataV3.route.length&&!coords.length?notice('El servicio devolvió datos del recorrido, pero no coordenadas interpretables. No se dibuja una ruta ficticia.'):'');
 }
+function metersBetween(a,b){
+ if(!a||!b)return null;
+ const p=validGeoPoint(a),q=validGeoPoint(b);
+ if(!p||!q)return null;
+ const toRad=Math.PI/180;
+ const dlat=(q.lat-p.lat)*toRad,dlon=(q.lon-p.lon)*toRad;
+ const aa=Math.sin(dlat/2)**2+Math.cos(p.lat*toRad)*Math.cos(q.lat*toRad)*Math.sin(dlon/2)**2;
+ return Math.round(6371000*2*Math.atan2(Math.sqrt(aa),Math.sqrt(1-aa)));
+}
+function distanceText(m){
+ if(!Number.isFinite(m))return '';
+ return m<1000?m+' m':(m/1000).toLocaleString('es-AR',{maximumFractionDigits:1})+' km';
+}
+async function loadNearby(){
+ if(dataV3.nearLoading)return;
+ dataV3.nearLoading=true;dataV3.nearError='';render();
+ try{
+  const location=await native('location.get');
+  if(!validGeoPoint(location))throw Error('El teléfono no devolvió una ubicación válida');
+  dataV3.nearLocation={lat:location.lat,lon:location.lon};
+  const response=await native('nearby',{lat:String(location.lat),lon:String(location.lon)});
+  if(!Array.isArray(response.items))throw Error('Respuesta inesperada de paradas cercanas');
+  dataV3.nearby=response.items;
+ }catch(e){dataV3.nearError=e.message||'No se pudieron obtener paradas cercanas';}
+ dataV3.nearLoading=false;render();
+}
+function nearbyV3(){
+ let out=intro('Paradas cerca tuyo','Ubicamos tu teléfono solo cuando lo pedís. Las paradas provienen del servicio original.','CERCA DE MÍ')+
+ '<div class="card"><h3>Buscar paradas cercanas</h3>'+
+ '<p>Al tocar Buscar, Android te pedirá acceso a la ubicación. La posición se envía únicamente al servidor SOAP original para buscar paradas cercanas; no se almacena ni se comparte con Vercel.</p>'+
+ '<button class="primary" onclick="loadNearby()" '+(dataV3.nearLoading?'disabled':'')+'>'+
+ I('pin')+' '+(dataV3.nearLoading?'Buscando tu ubicación…':'Buscar paradas cerca de mí')+'</button></div>';
+ if(dataV3.nearError)out+='<div class="card empty"><h3>No se pudo buscar</h3><p>'+clean(dataV3.nearError)+'</p></div>';
+ if(dataV3.nearby.length){
+  const list=dataV3.nearby.map((stop,i)=>({stop,i,d:metersBetween(dataV3.nearLocation,stop)}))
+    .sort((a,b)=>(a.d??Number.MAX_VALUE)-(b.d??Number.MAX_VALUE));
+  out+='<div class="headrow"><h3>Paradas encontradas ('+list.length+')</h3></div>';
+  if(geoPoints(dataV3.nearby).length)
+    out+='<button class="secondary map-action" onclick="openNearMap()">'+I('pin')+' Ver paradas y mi ubicación en el mapa</button>';
+  out+=list.slice(0,60).map(({stop,i,d})=>{
+    const label=stopHeading(stop)==='Sentido no informado'?
+      (stop.nombre||stop.identificador||'Parada'):stopHeading(stop);
+    const summary=[
+      stop.lineaNombre?'Línea '+stop.lineaNombre:'',
+      stop.identificador?'Parada '+stop.identificador:'',
+      d!=null?distanceText(d):''
+    ].filter(Boolean).join(' · ');
+    return item(label,summary||'Parada cercana','openNearbyStop('+i+')','pin');
+  }).join('');
+ }else if(!dataV3.nearLoading&&!dataV3.nearError&&dataV3.nearLocation){
+  out+=notice('El servicio original no informó paradas cerca de la ubicación consultada.');
+ }
+ return out;
+}
+function openNearbyStop(i){
+ const stop=dataV3.nearby[i];if(!stop)return;
+ // Solo abrir los arribos cuando la respuesta contiene ambos identificadores.
+ if(stop.lineaId&&stopIdentifier(stop)){
+  dataV3.line={id:stop.lineaId,nombre:stop.lineaNombre||stop.lineaId};
+  dataV3.stop=stop;dataV3.arrivals=[];dataV3.error='';go('arrival');loadArrivals();
+ }else{
+  toast('El servicio no informó línea y parada suficientes para consultar arribos. Elegí una línea.');
+  go('lines');
+ }
+}
 function settingsV3(){
  return intro('Servidor original de MOQSA','Conexión HTTPS directa sin servicios intermedios.','CONEXIÓN SOAP')+
  '<div class="card"><div class="field"><label>Servidor original</label><p style="overflow-wrap:anywhere">clswbsas.smartmovepro.net · HTTPS</p></div>'+
@@ -336,7 +401,7 @@ function pendingV3(title){return intro(title,'Sección todavía no conectada al 
  '<button class="secondary" onclick="go(\'lines\')">Consultar líneas</button>';}
 makers.home=mainV3;makers.more=menuV3;makers.lines=linesV3;makers.stops=stopsV3;makers.arrival=arrivalsV3;
 makers.fav=favsV3;makers.routes=routesV3;makers.map=routesV3;makers.time=arrivalsV3;
-makers.settings=settingsV3;makers.near=()=>pendingV3('Paradas cercanas');makers.journey=()=>pendingV3('¿Cómo llego?');
+makers.settings=settingsV3;makers.near=nearbyV3;makers.journey=()=>pendingV3('¿Cómo llego?');
 makers.voice=()=>pendingV3('Búsqueda por voz');makers.reload=()=>pendingV3('Puntos de recarga');
 makers.reports=()=>pendingV3('Consultas y reclamos');makers.news=()=>pendingV3('Novedades');
 makers.shortcuts=()=>pendingV3('Accesos directos');
