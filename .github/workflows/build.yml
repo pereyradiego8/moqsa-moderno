@@ -56,3 +56,40 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+      # Las APK debug de GitHub no son actualizables: cada runner crea otra firma.
+      # La firma permanente se conserva exclusivamente como secret en GitHub.
+      - name: Crear APK con firma permanente
+        id: permanent_signature
+        if: github.event_name != 'pull_request'
+        env:
+          MOQSA_KEYSTORE_B64: ${{ secrets.MOQSA_KEYSTORE_B64 }}
+          MOQSA_KEYSTORE_PASSWORD: ${{ secrets.MOQSA_KEYSTORE_PASSWORD }}
+          MOQSA_KEY_PASSWORD: ${{ secrets.MOQSA_KEY_PASSWORD }}
+        run: |
+          if [[ -z "$MOQSA_KEYSTORE_B64" || -z "$MOQSA_KEYSTORE_PASSWORD" || -z "$MOQSA_KEY_PASSWORD" ]]; then
+            echo "No se encontraron todos los secretos de firma. Se publica solo la APK de prueba."
+            exit 0
+          fi
+          KEYSTORE="$(mktemp)"
+          trap 'rm -f "$KEYSTORE"' EXIT
+          chmod 600 "$KEYSTORE"
+          printf '%s' "$MOQSA_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          mkdir -p app/build/outputs/apk/signed
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks "$KEYSTORE" --ks-type PKCS12 \
+            --ks-key-alias moqsa-actualizaciones \
+            --ks-pass env:MOQSA_KEYSTORE_PASSWORD \
+            --key-pass env:MOQSA_KEY_PASSWORD \
+            --v2-signing-enabled true --v3-signing-enabled true \
+            --out app/build/outputs/apk/signed/MOQSA-Actualizacion.apk \
+            app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose \
+            app/build/outputs/apk/signed/MOQSA-Actualizacion.apk
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: steps.permanent_signature.outputs.signed == 'true'
+        with:
+          name: moqsa-actualizacion-firmada
+          path: app/build/outputs/apk/signed/MOQSA-Actualizacion.apk
+          if-no-files-found: error
+          retention-days: 90
