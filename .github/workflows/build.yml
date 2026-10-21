@@ -24,6 +24,8 @@ jobs:
           ! grep -q 'diagnose.arrivals' app/src/main/java/ar/com/colectivos/consulta/MainActivity.kt
       - name: Validar localidades y sentidos
         run: node scripts/check-ui.mjs
+      - name: Verificar mapas y accesibilidad de arribos
+        run: node scripts/check-maps.mjs
       - name: Validar historial de navegación
         run: node scripts/check-navigation.mjs
       - uses: actions/setup-java@v4
