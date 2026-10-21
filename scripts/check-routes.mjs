@@ -31,7 +31,7 @@ const ctx=vm.createContext({
 });
 vm.runInContext(
  section('function validGeoPoint(','function currentStopPoint(')+
- section('function routeLabelFromService(','function mainV3(){')+
+ section('function routeMeters(','function mainV3(){')+
  section('function routeLineChoices(){','function metersBetween('),ctx);
 const call=expr=>vm.runInContext(expr,ctx);
 assert.match(call('routesV3()'),/Todas las líneas/);
