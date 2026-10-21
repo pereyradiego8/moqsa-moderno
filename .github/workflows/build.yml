@@ -20,6 +20,8 @@ jobs:
         run: node --check app/src/main/assets/live.js
       - name: Validar localidades y sentidos
         run: node scripts/check-ui.mjs
+      - name: Validar historial de navegación
+        run: node scripts/check-navigation.mjs
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
