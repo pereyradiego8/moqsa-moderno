@@ -77,3 +77,13 @@ Una prueba en CABA mostró precisión GPS de 12 metros y respuesta SOAP `System.
 El contrato WSDL público confirma que la operación `RecuperarParadasMasCercanasPorLocalidadProvinciaPais` recibe `isInteligente` (booleano), además de `listaCodigosEmpresa`. La APK anterior omitía el booleano y enviaba `191,7` como un único campo de lista. Ahora se envía `isInteligente=false`, respetando el orden WSDL, y se consultan por separado los dos códigos ya configurados (`191` y `7`) solo cuando el usuario toca Buscar. Las respuestas se reúnen sin duplicados. Los resultados incompletos quedan marcados como tales; si ambas consultas fallan, se muestra un error, jamás «no hay paradas».
 
 La APK original **no tenía la función Cerca**; se trata de una función nueva, experimental, cuyo alcance y cobertura no están garantizados por el proveedor. Mantener las consultas normales de líneas, paradas y arribos sin modificaciones. No mostrar cobertura de CABA confirmada hasta recibir y verificar registros reales en un teléfono.
+
+## Cerca → Detalle de una parada, todas las líneas (beta 0.6.0)
+
+- Al pulsar una parada del listado GPS se abre su ficha `nearStop` **sin** pasar por Línea → Localidad → Calle → Intersección.
+- La lista de paradas usa calle y cruces recibidos del servidor (`CallePrincipal`, `CalleInterseccion`, y posibles campos de segunda intersección y altura), no muestra `MO-xxxxx` como nombre principal. Si el proveedor no informa una calle o una segunda esquina, la UI lo dice y no inventa un dato geográfico.
+- La operación SOAP utilizada es `RecuperarProximosArribosParaParadasCercanas`, con `identificadorParada`, `listaCodigosEmpresas` (empresas previamente utilizadas 191 y 7, consultadas de manera individual), `codigoAplicacion=24`, `localidad=QUILMES` (configuración original), `isSublinea=false` y `isSoloAdaptados=false`. Esta consulta **no lleva codigoLineaParada**, por lo que devuelve las líneas disponibles en ese punto dentro de la cobertura del proveedor.
+- Las llegadas se muestran por línea, destino y ETA estimada, ordenadas por tiempo cuando éste es interpretable. El botón Actualizar no vuelve a pedir línea.
+- Si una empresa no responde, la app señala resultados parciales. Si el servidor no informa predicciones o faltan campos de ubicación, lo muestra sin inventar tiempos.
+- La consulta de arribos tradicionales por línea y el comportamiento de Guardados no se alteraron.
+- **Limitación pendiente de verificar en teléfono:** que el método adicional responda con la lista de líneas y las direcciones necesarias en cada parada; el contrato WSDL y la compilación no garantizan la disponibilidad real de datos de esa API.
