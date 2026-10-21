@@ -389,7 +389,7 @@ function nearbyStopLocation(stop){
  const height=String(stop?.altura||'').trim();
  const address=String(stop?.direccion||'').trim();
  const rawName=String(stop?.nombre||'').trim();
- const isCode=s=>!s||/^MO[- ]?\\d+$/i.test(s)||/^\\d+$/.test(s);
+ const isCode=s=>!s||/^MO[- ]?\d+$/i.test(s)||/^\d+$/.test(s);
  let street=main;
  if(!street && address && !isCode(address))street=address;
  if(!street && rawName && !isCode(rawName))street=rawName;
@@ -405,7 +405,7 @@ function nearbyStopLocation(stop){
 function nearStopArrivalsSorted(items){
  return [...(Array.isArray(items)?items:[])].sort((a,b)=>{
   const parse=v=>{
-   const match=String(v?.arribo||'').match(/(\\d{1,4})\\s*min/i);
+   const match=String(v?.arribo||'').match(/(\d{1,4})\s*min/i);
    return match?Number(match[1]):Number.MAX_VALUE;
   };
   return parse(a)-parse(b);
