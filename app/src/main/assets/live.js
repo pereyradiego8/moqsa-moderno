@@ -120,7 +120,10 @@ function routeVariants(){
  }
  const entries=[...groups.entries()];
  // El SOAP suele separar los ramales en Descripcion; no unir ida y vuelta.
- if(entries.length>1 && entries.length<=20 && entries.some(([name])=>name)){
+ const hasBranches=entries.length>1 && entries.length<=80 &&
+  entries.every(([name])=>Boolean(name)) &&
+  entries.filter(([,points])=>points.length>=2).length>=Math.ceil(entries.length*0.7);
+ if(hasBranches){
   return entries.map(([name,points],i)=>({
    label:routeLabelFromService(name,i),
    points
