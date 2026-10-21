@@ -41,10 +41,19 @@ function stopHeading(r){
  if(desc&&desc!==ident&&!/^MO-\d+/i.test(desc))return desc;
  return 'Sentido no informado';
 }
+function stopIdentifier(stop){
+ const ident=String(stop?.identificador||'').trim();
+ const internal=String(stop?.codigoInterno||stop?.id||'').trim();
+ // En las compilaciones anteriores se copiaba "Codigo" al campo Identificador.
+ // No enviar de nuevo el registro interno como identificador de llegada.
+ if(!ident||(ident===internal&&/^\d+$/.test(ident)))return '';
+ return ident;
+}
 function stopSubtitle(r){
- const id=String(r.identificador||r.id||'').trim();
+ const id=stopIdentifier(r);
  const street=String(r.detalle||'').trim();
- return [street,id?'Parada '+id:''].filter(Boolean).join(' · ')||'Consultar próximos arribos';
+ const internal=String(r.codigoInterno||r.id||'').trim();
+ return [street,id?'Parada '+id:internal?'Código interno '+internal+' · identificador no informado':'Identificador no informado'].filter(Boolean).join(' · ');
 }
 function mainV3(){
  return '<div class="greeting"><div class="eyebrow">TU VIAJE, MÁS SIMPLE</div><h2>¿A dónde<br>vamos hoy?</h2><p>Encontrá el colectivo y su parada sin perder tiempo.</p></div>'+
@@ -103,43 +112,33 @@ function chooseStop(i){
 }
 async function loadArrivals(){
  if(!dataV3.line||!dataV3.stop)return;
- dataV3.arrivalsChecked=false;dataV3.mensaje='';dataV3.arrivals=[];render();
- // El WebService espera la ciudad configurada de MOQSA, NO la localidad de la calle.
- // OriginalSoap aplica el valor global original al construir la petición.
- await request('arrivals',{linea:dataV3.line.id,parada:dataV3.stop.identificador||dataV3.stop.id},'arrivals');
+ dataV3.arrivalsChecked=false;dataV3.mensaje='';dataV3.arrivals=[];
+ const identifier=stopIdentifier(dataV3.stop);
+ if(!identifier){
+  dataV3.error='La parada no incluye el campo Identificador del servicio original. No se puede consultar con el código interno; volvé a seleccionar la parada.';
+  render();
+  return;
+ }
+ dataV3.error='';render();
+ // Sólo enviamos el identificador real y la línea seleccionada.
+ await request('arrivals',{linea:dataV3.line.id,parada:identifier},'arrivals');
  dataV3.arrivalsChecked=!dataV3.error;
-}
-async function diagnoseArrivals(){
- if(!dataV3.stop||!dataV3.line)return;
- dataV3.diagnosticando=true;dataV3.diagnostico=null;render();
- try{
-  const result=await native('arrivals',{linea:'77',parada:'MO-01080'});
-  dataV3.diagnostico={estado:'respuesta_recibida',cantidad:Array.isArray(result.items)?result.items.length:0,respuesta:String(result.mensaje||'OK')};
- }catch(e){dataV3.diagnostico={estado:'consulta_fallida',respuesta:e.message||'Error sin detalle'};}
- dataV3.diagnosticando=false;render();
 }
 function diagnosticPanel(){
  if(!dataV3.stop||!dataV3.line||!dataV3.error)return '';
- const stopId=String(dataV3.stop.identificador||dataV3.stop.id||'');
- const lineId=String(dataV3.line.id||'');
- let result='<div class="card"><h3>Diagnóstico de esta consulta</h3>'+
- '<p>Parada: <strong>'+clean(stopId)+'</strong></p>'+
- '<p>Línea interna: <strong>'+clean(lineId)+'</strong></p>'+
- '<p>Ciudad enviada: <strong>QUILMES</strong></p>'+
- '<p>Respuesta recibida: <strong>'+clean(dataV3.error)+'</strong></p>';
- if(dataV3.diagnostico){
-  const d=dataV3.diagnostico;
-  const description=d.estado==='respuesta_recibida'
-   ?'Respuesta del servidor · registros '+String(d.cantidad??0)
-   :'Consulta de referencia rechazada';
-  result+='<p><strong>Parada de referencia MO-01080 / línea 77:</strong> '+clean(description)+'</p>'+
-  '<p>'+clean(d.respuesta||'Sin mensaje')+'</p>';
- }
- result+='<button class="secondary" onclick="diagnoseArrivals()" '+
- (dataV3.diagnosticando?'disabled':'')+'>'+
- (dataV3.diagnosticando?'Consultando referencia…':'Comparar con una parada de referencia')+
- '</button><p style="font-size:12px">Este diagnóstico muestra solo códigos de transporte y estados de consulta. No revela credenciales.</p></div>';
- return result;
+ const ident=stopIdentifier(dataV3.stop);
+ const codigo=String(dataV3.stop.codigoInterno||dataV3.stop.id||'');
+ const line=String(dataV3.line.id||'');
+ return '<div class="card"><h3>Diagnóstico de esta parada</h3>'+
+ '<p>Línea seleccionada: <strong>'+clean(dataV3.line.nombre||'')+' (interna '+clean(line)+')</strong></p>'+
+ '<p>Código de registro: <strong>'+clean(codigo||'No informado')+'</strong></p>'+
+ '<p>Identificador de llegadas: <strong>'+clean(ident||'No informado por el servicio')+'</strong></p>'+
+ '<p>Ciudad de consulta: <strong>QUILMES</strong></p>'+
+ '<p><strong>Qué está pasando:</strong> '+clean(ident?
+   'El servidor rechazó esta combinación de línea e identificador.':
+   'La respuesta de paradas no incluyó un identificador válido; el código de registro no reemplaza ese dato.')+'</p>'+
+ '<button class="secondary" onclick="moqsaGoBack()">Volver a la selección de paradas</button>'+
+ '<p style="font-size:12px">Se muestran únicamente los códigos de la línea y parada seleccionadas; no se hacen consultas a otras líneas ni se exponen contraseñas.</p></div>';
 }
 function arrivalsV3(){
  if(!dataV3.stop||!dataV3.line)return intro('Próximas llegadas','Elegí una parada primero.','ARRIBOS')+'<button class="primary" onclick="go(\'lines\')">Buscar línea</button>';
@@ -152,7 +151,7 @@ function arrivalsV3(){
 function favoritesV3(){try{const a=JSON.parse(localStorage.getItem('moqsa_v3_favs')||'[]');return Array.isArray(a)?a.filter(x=>x&&x.line&&x.stop).slice(0,100):[];}catch(e){return [];}}
 function toggleFavorite(){
  if(!dataV3.line||!dataV3.stop)return;
- const key=dataV3.line.id+'|'+(dataV3.stop.identificador||dataV3.stop.id);
+ const key=dataV3.line.id+'|'+(stopIdentifier(dataV3.stop)||dataV3.stop.id);
  let rows=favoritesV3(),idx=rows.findIndex(x=>x.key===key);
  if(idx>=0){rows.splice(idx,1);toast('Eliminada de favoritos');}
  else{rows.unshift({key,line:dataV3.line,stop:dataV3.stop});toast('Guardada en favoritos');}
