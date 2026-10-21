@@ -437,7 +437,7 @@ async function loadNearStopArrivals(){
  try{
   const response=await native('nearbyArrivals',{parada:ident});
   if(requestId!==dataV3.nearStopRequestId)return;
-  if(!Array.isArray(response.items))throw Error('El servidor no devolvió un formato válido de arribos');
+  if(!Array.isArray(response.items))throw Error('No pudimos consultar las llegadas');
   dataV3.nearStopArrivals=nearStopArrivalsSorted(response.items);
   dataV3.nearStopMessage=String(response.mensaje||'');
   dataV3.nearStopPartial=Boolean(response.parcial);
@@ -555,9 +555,9 @@ makers.about=()=>intro('MOQSA','Encontrá tu colectivo con más facilidad.','ACE
 function helpV3(){
  const steps=[
  ['01','Buscá tu línea','Entrá en Líneas y escribí el número (por ejemplo, 300). Elegí el ramal que uses.'],
- ['02','Elegí la calle y el cruce','Seleccioná la calle principal y después su intersección. Estas opciones vienen del servicio de transporte.'],
- ['03','Comprobá el sentido de la parada','Prestá atención al destino: “Hacia …” identifica el sentido del colectivo. El código MO-xxxxx es una referencia técnica.'],
- ['04','Consultá el próximo arribo','El tiempo es una estimación del servidor y puede cambiar. Tocá Actualizar llegadas cuando quieras refrescar.'],
+ ['02','Elegí la calle y el cruce','Seleccioná la localidad, la calle principal y después su intersección.'],
+ ['03','Comprobá el sentido de la parada','Prestá atención al destino: “Hacia …” indica en qué dirección va el colectivo.'],
+ ['04','Consultá el próximo arribo','El tiempo es aproximado y puede cambiar. Tocá Actualizar llegadas cuando quieras refrescar.'],
  ['05','Guardá y ubicá tu parada','Tocá la estrella para agregarla a Guardados. Si se conocen las coordenadas, también podés ubicarla en el mapa.']
  ];
  return intro('Cómo consultar','Todo lo que necesitás para encontrar tu colectivo más rápido.','GUÍA DE VIAJE')+
