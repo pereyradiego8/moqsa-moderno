@@ -24,14 +24,16 @@ Aunque previamente se validó la secuencia SOAP mediante un proxy de prueba, el 
 
 La APK no puede leer las preferencias privadas de otra app Android instalada. No hay ningún backend propio de este proyecto.
 
-## Corrección 21/10/2026: sentidos y arribos
+## Corrección de arribos — 21/10/2026
 
-- `OriginalSoap` recupera los metadatos de sentido/bandera que el cliente anterior descartaba.
-- El lector de JSON SOAP ahora busca `Arribos` y `Paradas` dentro de `PrincipalJson` incluso cuando la respuesta incluye `MensajeEstado` y otras propiedades.
-- `RecuperarProximosArribos` ya no recibe `localidad=QUILMES` fija: usa la localidad de la calle seleccionada. Ejemplo verificado en los tests: `CALLE 24 - BERAZATEGUI` implica `BERAZATEGUI`.
-- La lista de paradas presenta el sentido cuando está informado y deja `MO-xxxxx` como referencia secundaria. Nunca inventa un destino.
-- La portada y el menú habitual omiten Configuración de conexión; el acceso técnico queda fuera del recorrido normal.
-- Se añadió `scripts/check-ui.mjs` para probar localidades, sentidos y ausencia de la opción Conexión.
-- La prueba automática valida compilación y arranque con un recurso de autenticación ficticio. No sustituye la comprobación de arribos reales en un teléfono.
+El APK original toma la ciudad desde SharedPreferences('datos').getString('ciudad', 'QUILMES') y la envía a RecuperarProximosArribos.
+El nombre de la calle (ejemplo: CALLE 24 - BERAZATEGUI) no determina la ciudad para SOAP.
 
-**Para probarlo:** con la línea 300, elegir `CALLE 24 - BERAZATEGUI`, `CALLE 142 A - BERAZATEGUI` y comparar `MO-00527` o `MO-01574` contra la aplicación original. Si un destino sigue sin aparecer o hay arribos vacíos, el diagnóstico requiere confirmar los datos que devuelve esa parada; no se asignan nombres ni tiempos falsos.
+El cliente había cambiado erróneamente esa ciudad a BERAZATEGUI, lo que coincidió con respuestas 'Parada inexistente'.
+Se restauró el valor por defecto QUILMES. Si en una instalación se eligió manualmente otra ciudad, deberá configurarse ese valor.
+El mensaje 'Parada inexistente' se trata ahora como error del servidor y no como ausencia de predicciones.
+
+Se actualizaron las pruebas de regresión en scripts/check-ui.mjs para impedir deducir ciudad de la calle.
+El APK privado de emergencia, firmado con el certificado de la versión anterior, corrige ese parámetro desde el JavaScript sin alterar clases Android.
+
+**Pendiente:** validación de llegadas reales en un teléfono. No afirmar que las predicciones funcionan hasta completar esa prueba.
