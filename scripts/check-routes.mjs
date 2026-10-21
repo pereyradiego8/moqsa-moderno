@@ -12,7 +12,7 @@ const dataV3={
  lines:[{id:'1',nombre:'65'},{id:'2',nombre:'619'},{id:'3',nombre:'300'}],
  line:{id:'99',nombre:'Última línea 98'},routeLine:null,routeQuery:'',
  route:[],routeRequestId:0,routeVariant:0,routeMapLoading:false,routeMapError:'',
- routeLoading:false,routeError:'',routeRefreshing:false,routeRefreshStatus:'',
+ routeLoading:false,routeError:'',routeAddresses:{},routeAddressPending:false,routeRefreshing:false,routeRefreshStatus:'',
  routeRefreshError:'',loading:false
 };
 const pending=[], elements={routeSearch:{value:''},routeLineResults:{innerHTML:''}};
@@ -59,11 +59,20 @@ await new Promise(setImmediate);
 pending[0].resolve({items:[{lat:-34.8,lon:-58.3,nombre:'Tramo viejo'}]});
 await new Promise(setImmediate);
 assert.equal(dataV3.route[0].nombre,'Tramo real');
+assert.equal(pending[2].action,'route.addresses','Se consultan los extremos geográficos');
+assert.equal(pending[2].params.points.length,2);
+pending[2].resolve({items:[{street:'Avenida Mitre',intersection:'',locality:'Quilmes'},{street:'Calle 12',intersection:'Calle 45',locality:'Bernal'}]});
+await new Promise(setImmediate);
+assert.match(call('routesV3()'),/SALE DE/);
+assert.match(call('routesV3()'),/LLEGA A/);
+assert.match(call('routesV3()'),/Avenida Mitre/);
+assert.match(call('routesV3()'),/Calle 12 y Calle 45/);
+assert.match(call('routesV3()'),/Intersección no informada/);
 const opening=call('openRouteMap()');
-assert.equal(pending[2].action,'map.show');
-assert.equal(pending[2].params.type,'route');
-assert.equal(pending[2].params.points.length,1);
-pending[2].resolve({opened:true});
+assert.equal(pending[3].action,'map.show');
+assert.equal(pending[3].params.type,'route');
+assert.equal(pending[3].params.points.length,1);
+pending[3].resolve({opened:true});
 await opening;
 assert.equal(dataV3.line.id,'99');
 
@@ -99,12 +108,19 @@ for(const [name,from,to,count] of [
 assert.equal(call('routeVariants().length'),2,'Solo Ida y Vuelta, nunca ramales intermedios');
 assert.equal(call('routeVariants()[0].label'),'Ida');
 assert.equal(call('routeVariants()[1].label'),'Vuelta');
-assert.match(call('routesV3()'),/Elegí Ida o Vuelta/);
+assert.match(call('routesV3()'),/Elegí el recorrido según dónde comienza y termina/);
 assert.ok(!call('routesV3()').includes('puntos geográficos'),'No exponer vértices como recorridos');
 call('chooseRouteVariant(1)');
 const onlyVuelta=call('routeMapPoints()');
 assert.equal(onlyVuelta[0].lat,-34.76);
 assert.ok(Math.abs(onlyVuelta.at(-1).lat-(-34.8))<1e-7);
+// Los nombres de cabeceras se extraen del proveedor sin inventar calles.
+const hints=call("routeTerminalHints('CAPITAL;Est.Bernal-C.Central')");
+assert.equal(hints[0],'Est.Bernal');
+assert.equal(hints[1],'C.Central');
+dataV3.route=[{nombre:'CAPITAL;Est.Bernal-C.Central',lat:-34.7,lon:-58.2,callePrincipal:'Calle 55',cruce1:'Calle 16'}];
+dataV3.routeAddresses={};
+assert.match(call('routesV3()'),/Calle 55 y Calle 16/);
 // Dos recorridos con el mismo rumbo NO constituyen una vuelta.
 dataV3.route=[
  ...Array.from({length:10},(_,i)=>({nombre:'Uno',lat:-34.8+i*.001,lon:-58.2})),
@@ -139,9 +155,9 @@ assert.equal(dataV3.routeLine,null);
 assert.match(call('routesV3()'),/Todas las líneas/);
 ctx.screen='routes';ctx.root.scrollTop=270;
 const updating=call('refreshRouteLines()');
-assert.equal(pending[3].action,'lines');
+assert.equal(pending[4].action,'lines');
 assert.match(dataV3.routeRefreshStatus,/Actualizando/);
-pending[3].resolve({items:[{id:'4',nombre:'584'},{id:'5',nombre:'603'}]});
+pending[4].resolve({items:[{id:'4',nombre:'584'},{id:'5',nombre:'603'}]});
 await updating;
 assert.equal(dataV3.lines.length,2);
 assert.match(dataV3.routeRefreshStatus,/Lista actualizada/);
