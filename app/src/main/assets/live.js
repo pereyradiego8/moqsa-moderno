@@ -102,6 +102,12 @@ function openNearMap(){
  const stops=geoPoints(dataV3.nearby,x=>stopHeading(x),'stop');
  openMap('stops','Paradas cercanas',[...(me?[me]:[]),...stops]);
 }
+function routeLabelFromService(name,index=0){
+ const text=String(name||'').trim();
+ if(!text)return 'Recorrido disponible';
+ const chunks=text.split(';').map(value=>value.trim()).filter(Boolean);
+ return chunks.length>1?chunks.slice(1).join(' · '):chunks[0];
+}
 function routeVariants(){
  const all=(Array.isArray(dataV3.route)?dataV3.route:[])
    .filter(row=>validGeoPoint(row,row?.nombre||'', 'route'));
@@ -116,11 +122,13 @@ function routeVariants(){
  // El SOAP suele separar los ramales en Descripcion; no unir ida y vuelta.
  if(entries.length>1 && entries.length<=20 && entries.some(([name])=>name)){
   return entries.map(([name,points],i)=>({
-   label:name.split(';').slice(1).join(' · ').trim()||name.split(';')[0].trim()||'Ramal '+(i+1),
+   label:routeLabelFromService(name,i),
    points
   }));
  }
- return [{label:'Recorrido',points:all}];
+ // Para una sola variante, mostrar igualmente una opción seleccionable.
+ // Si cada vértice tiene un nombre distinto no se inventan ramales.
+ return [{label:entries.length===1?routeLabelFromService(entries[0][0]):'Recorrido disponible',points:all}];
 }
 function chooseRouteVariant(index){
  const variants=routeVariants();
@@ -470,12 +478,12 @@ function routesV3(){
   if(dataV3.routeLoading)out+='<p class="route-loading">Consultando el recorrido…</p>';
   else if(dataV3.routeError)out+='<p class="route-error">'+clean(dataV3.routeError)+'</p>';
   else if(variants.length){
-   if(variants.length>1){
-    out+='<p>Elegí el ramal o sentido para ver su trazado.</p><div class="route-variants" role="group" aria-label="Ramal del recorrido">';
-    out+=variants.map((r,i)=>'<button class="chip '+(dataV3.routeVariant===i?'selected':'')+
-     '" onclick="chooseRouteVariant('+i+')" aria-pressed="'+(dataV3.routeVariant===i?'true':'false')+'">'+
-     clean(r.label)+'</button>').join('')+'</div>';
-   }
+   out+='<p>'+(variants.length>1?'Elegí el ramal o sentido para ver su trazado.':
+    'Este es el recorrido disponible para la línea.')+'</p>'+
+    '<div class="route-variants" role="group" aria-label="Ramal o sentido del recorrido">';
+   out+=variants.map((r,i)=>'<button class="chip '+(dataV3.routeVariant===i?'selected':'')+
+    '" onclick="chooseRouteVariant('+i+')" aria-pressed="'+(dataV3.routeVariant===i?'true':'false')+'">'+
+    clean(r.label)+'</button>').join('')+'</div>';
    const current=variants[dataV3.routeVariant]||variants[0];
    out+='<p>'+current.points.length+' puntos geográficos disponibles.</p>'+
     '<button class="primary map-action" onclick="openRouteMap()" '+
@@ -742,30 +750,61 @@ const oldGo=go;
 const navTrail=[];
 const MAX_NAV_TRAIL=60;
 
-// Todas las rutas (incluidas las pestañas) dejan constancia de la pantalla anterior.
+function snapshotNavScreen(){
+ const previous={page:screen,scroll:typeof root!=='undefined'&&root?root.scrollTop:0};
+ if(screen==='routes'){
+  previous.route={
+   line:dataV3.routeLine,items:dataV3.route,query:dataV3.routeQuery,
+   variant:dataV3.routeVariant,error:dataV3.routeError,mapError:dataV3.routeMapError
+  };
+ }
+ return previous;
+}
+function restoreNavScreen(entry){
+ if(entry.route && entry.page==='routes'){
+  dataV3.routeRequestId++;
+  dataV3.routeLine=entry.route.line;
+  dataV3.route=entry.route.items||[];
+  dataV3.routeQuery=entry.route.query||'';
+  dataV3.routeVariant=entry.route.variant||0;
+  dataV3.routeError=entry.route.error||'';
+  dataV3.routeMapError=entry.route.mapError||'';
+  dataV3.routeLoading=false;
+  dataV3.routeMapLoading=false;
+ }
+ oldGo(entry.page);
+ if(typeof root!=='undefined'&&root)root.scrollTop=entry.scroll||0;
+ if(entry.page==='routes'&&!dataV3.lines.length)void refreshRouteLines();
+ else if(entry.page==='lines'&&!dataV3.lines.length)loadLines();
+}
+function resetRouteSelection(){
+ dataV3.routeRequestId++;
+ dataV3.routeLine=null;dataV3.routeQuery='';dataV3.route=[];
+ dataV3.routeLoading=false;dataV3.routeError='';dataV3.routeVariant=0;
+ dataV3.routeMapLoading=false;dataV3.routeMapError='';
+ dataV3.routeListScroll=0;
+}
+// Cada navegación nueva crea un nivel. Se recupera el desplazamiento al volver.
 go=function(key){
  const destination=PAGES[key]?key:'home';
  if(destination===screen)return;
- if(destination==='routes'){
-  dataV3.routeRequestId++;
-  dataV3.routeLine=null;dataV3.routeQuery='';dataV3.route=[];
-  dataV3.routeLoading=false;dataV3.routeError='';dataV3.routeVariant=0;dataV3.routeMapError='';
- }
- navTrail.push(screen);
+ navTrail.push(snapshotNavScreen());
  if(navTrail.length>MAX_NAV_TRAIL)navTrail.shift();
+ if(destination==='routes')resetRouteSelection();
  oldGo(destination);
  if(destination==='routes'&&!dataV3.lines.length)void refreshRouteLines();
  else if(destination==='lines'&&!dataV3.lines.length)loadLines();
 };
-
-// Función compartida por Atrás Android y las flechas visibles.
+// Retroceder primero dentro de Recorridos y luego por pantallas visitadas.
 window.moqsaGoBack=function(){
+ if(screen==='routes'&&dataV3.routeLine){
+  backToRouteLines();
+  return true;
+ }
  while(navTrail.length){
   const previous=navTrail.pop();
-  if(!PAGES[previous]||previous===screen)continue;
-  oldGo(previous);
-  if(previous==='routes'&&!dataV3.lines.length)void refreshRouteLines();
-  else if(previous==='lines'&&!dataV3.lines.length)loadLines();
+  if(!previous||!PAGES[previous.page]||previous.page===screen)continue;
+  restoreNavScreen(previous);
   return true;
  }
  if(screen!=='home'){
@@ -774,10 +813,15 @@ window.moqsaGoBack=function(){
  }
  return false;
 };
-
-// Las flechas de pantalla respetan el historial en vez de crear una ruta de regreso nueva.
 back=function(fallback='home'){
- const previous=[...navTrail].reverse().find(p=>PAGES[p]&&p!==screen)||fallback;
- return '<div class="page-header"><button class="back" aria-label="Volver a '+clean(PAGES[previous]||'Inicio')+'" onclick="moqsaGoBack()">'+I('back')+'</button><span class="crumb">Volver a '+clean(PAGES[previous]||'Inicio')+'</span></div>';
+ if(screen==='routes'&&dataV3.routeLine){
+  return '<div class="page-header"><button class="back" aria-label="Volver a recorridos" onclick="moqsaGoBack()">'+
+   I('back')+'</button><span class="crumb">Volver a recorridos</span></div>';
+ }
+ const previous=[...navTrail].reverse().find(p=>p&&PAGES[p.page]&&p.page!==screen);
+ const target=previous?.page||fallback;
+ return '<div class="page-header"><button class="back" aria-label="Volver a '+clean(PAGES[target]||'Inicio')+
+  '" onclick="moqsaGoBack()">'+I('back')+'</button><span class="crumb">Volver a '+
+  clean(PAGES[target]||'Inicio')+'</span></div>';
 };
 render();loadConfig();
