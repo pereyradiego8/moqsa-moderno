@@ -323,7 +323,8 @@ async function loadNearby(){
    codigoEstado:response.codigoEstado,
    mensaje:String(response.mensaje||'').slice(0,250),
    originales:Number(response.registrosOriginales),
-   interpretados:Number(response.registrosInterpretados)
+   interpretados:Number(response.registrosInterpretados),
+   parcial:Boolean(response.parcial)
   };
  }catch(e){dataV3.nearError=e.message||'No se pudieron obtener paradas cercanas';}
  dataV3.nearLoading=false;render();
@@ -339,10 +340,11 @@ function nearbyStateCard(){
  if(d){
    const original=Number.isFinite(d.originales)?d.originales:null;
    const parsed=Number.isFinite(d.interpretados)?d.interpretados:dataV3.nearby.length;
+   if(d.parcial)out+='<p><strong>Resultado parcial.</strong> Una de las consultas al servidor no pudo completarse. Las paradas mostradas pueden no representar toda la zona.</p>';
    if(original!==null && original>0 && parsed===0){
      out+='<p><strong>La respuesta tiene paradas, pero esta versión no pudo interpretarlas.</strong> Es un problema de la aplicación, no de tu ubicación.</p>';
    }else if(original===0){
-     out+='<p><strong>El servidor original respondió sin paradas.</strong> Su radio de búsqueda no está documentado y no puede ampliarse desde esta pantalla.</p>';
+     out+='<p><strong>No hubo paradas en las respuestas válidas.</strong> Esto no demuestra que no existan cerca. El servicio no publica el radio y puede tener cobertura limitada.</p>';
    }else{
      out+='<p>Registros recibidos: <strong>'+clean(parsed)+'</strong></p>';
    }
@@ -355,7 +357,7 @@ function nearbyStateCard(){
  return out;
 }
 function nearbyV3(){
- let out=intro('Paradas cerca tuyo','Buscamos paradas del servicio original según la ubicación de tu teléfono.','CERCA DE MÍ')+
+ let out=intro('Paradas cerca tuyo','Función experimental: el SOAP original puede no ofrecer datos suficientes en tu zona.','CERCA DE MÍ')+
  '<div class="card"><h3>Buscar paradas cercanas</h3>'+
  '<p>Android pide permiso cuando tocás Buscar. La ubicación se envía al servidor SOAP original para consultar paradas, sin pasar por servidores propios.</p>'+
  '<button class="primary" onclick="loadNearby()" '+(dataV3.nearLoading?'disabled':'')+'>'+
@@ -375,7 +377,7 @@ function nearbyV3(){
    return item(label,summary||'Parada cercana','openNearbyStop('+i+')','pin');
   }).join('');
  }else if(!dataV3.nearLoading&&!dataV3.nearError&&dataV3.nearDiagnostic){
-  out+=notice('No se encontraron paradas en la respuesta. Esto no significa que no existan paradas en tu barrio: depende de la cobertura del servidor original.');
+  out+=notice('Sin paradas informadas por el servicio. Cerca es una función experimental; podés buscar normalmente por línea y localidad.');
   out+='<button class="secondary" onclick="go(&quot;lines&quot;)">Buscar paradas por línea</button>';
  }
  if(dataV3.nearLocation&&!dataV3.nearLoading)out+=nearbyStateCard();
