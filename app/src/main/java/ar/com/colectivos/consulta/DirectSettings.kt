@@ -18,8 +18,7 @@ class DirectSettings(context: Context) {
     // Private build placeholders. They are invalid in public builds.
     private val bundledUser = "ZZZZZZZZZZZZZ"
     private val bundledPassword = "ZZZZZZZZZZZZZZZZ"
-    private fun hasBundledAccess() = bundledUser != "ZZZZZZZZZZZZZ" &&
-        bundledPassword != "ZZZZZZZZZZZZZZZZ"
+    private fun hasBundledAccess() = !bundledUser.startsWith("Z") && !bundledPassword.startsWith("Z")
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         val found = store.getKey(alias, null)
