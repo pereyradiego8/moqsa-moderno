@@ -20,6 +20,7 @@ class MainActivity : Activity() {
     private val executor = Executors.newSingleThreadExecutor()
     private val directSettings by lazy { DirectSettings(this) }
     private val directSoap by lazy { OriginalSoap(directSettings) }
+    private val routeGeocoder by lazy { RouteGeocoder(applicationContext) }
     private val userLocation by lazy { UserLocation(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,6 +88,7 @@ class MainActivity : Activity() {
                     val value = when(action) {
                         "config.get" -> directSettings.publicConfig()
                         "config.set" -> directSettings.save(args)
+                        "route.addresses" -> routeGeocoder.lookup(args)
                         "health" -> JSONObject()
                             .put("configured", directSettings.hasCredentials())
                             .put("service", "SOAP original de MOQSA")
