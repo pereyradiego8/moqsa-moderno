@@ -67,13 +67,13 @@ jobs:
             adb logcat -d -s AndroidRuntime:E ActivityTaskManager:E ActivityManager:E dalvikvm:E
             test -s /tmp/moqsa.pid
             echo 'APP SURVIVED LAUNCH WITH FAKE PRIVATE DEX'
-            echo '=== Mapa: intentar iniciar actividad interna en APK debug ==='
-            if adb shell run-as ar.com.colectivos.consulta am start -W -n ar.com.colectivos.consulta/.MapActivity --es map_title 'Prueba de recorrido' --es map_type route --es map_points '[{"lat":-34.75,"lon":-58.26,"nombre":"A"},{"lat":-34.76,"lon":-58.25,"nombre":"B"}]'; then
-              sleep 5
-              adb shell pidof ar.com.colectivos.consulta > /tmp/moqsa.map.pid || true
-              test -s /tmp/moqsa.map.pid
-              echo 'MAP ACTIVITY SURVIVED LAUNCH'
-            else
-              echo 'Launch interno no permitido desde shell; se requiere test manual del mapa.'
-            fi
+            echo '=== Probar mapa nativo en APK de prueba ==='
+            adb shell run-as ar.com.colectivos.consulta am start -W -n ar.com.colectivos.consulta/.MapActivity --es map_title 'Recorrido de prueba' --es map_type route --es map_points '[{"lat":-34.75,"lon":-58.26,"nombre":"A"},{"lat":-34.76,"lon":-58.25,"nombre":"B"}]' > /tmp/moqsa-map-start.txt 2>&1 || true
+            cat /tmp/moqsa-map-start.txt
+            sleep 5
+            adb shell pidof ar.com.colectivos.consulta > /tmp/moqsa.map.pid || true
+            test -s /tmp/moqsa.map.pid
+            if grep -q 'Starting:' /tmp/moqsa-map-start.txt; then echo 'MAP ACTIVITY STARTED'; else echo 'El sistema no permitió abrir una actividad no exportada desde ADB'; fi
+            adb logcat -d -s AndroidRuntime:E | tail -n 80
+
 
