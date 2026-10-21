@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
+import java.io.File
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -23,7 +24,12 @@ class MapActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Configuration.getInstance().userAgentValue = "MOQSA-NoOficial/0.4 (" + packageName + ")"
+        // Cache interno: no requiere permisos de almacenamiento en Android moderno.
+        val osmdroid = Configuration.getInstance()
+        osmdroid.load(applicationContext, getSharedPreferences("moqsa_osm", MODE_PRIVATE))
+        osmdroid.osmdroidBasePath = File(cacheDir, "osmdroid").apply { mkdirs() }
+        osmdroid.osmdroidTileCache = File(cacheDir, "osmdroid/tiles").apply { mkdirs() }
+        osmdroid.userAgentValue = "MOQSA-NoOficial/0.4 (" + packageName + ")"
         window.statusBarColor = Color.rgb(5, 100, 80)
         window.navigationBarColor = Color.BLACK
 
