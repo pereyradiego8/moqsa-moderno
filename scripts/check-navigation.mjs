@@ -9,12 +9,13 @@ const pages=['home','lines','stops','arrival','fav','routes','near','nearStop','
 const dataV3={
  lines:[{id:'77',nombre:'300'}],routeRequestId:0,route:[],routeLine:null,
  routeQuery:'',routeVariant:0,routeLoading:false,routeError:'',
- routeMapError:'',routeListScroll:0
+ routeMapError:'',routeListScroll:0,
+ locality:null,street:null,crossing:null,crossings:[],stops:[],loading:false,error:''
 };
 const root={scrollTop:0};
 const ctx=vm.createContext({window:{},root,dataV3,PAGES:Object.fromEntries(pages.map(p=>[p,p])),
  clean:x=>String(x),I:x=>x,render:()=>{},loadConfig:()=>{},loadLines:()=>{},
- refreshRouteLines:()=>{},backToRouteLines:()=>{
+ refreshRouteLines:()=>{},invalidateStopRequests:()=>{},backToRouteLines:()=>{
    dataV3.routeRequestId++;dataV3.routeLine=null;dataV3.route=[];dataV3.routeVariant=0;
    root.scrollTop=dataV3.routeListScroll;
  }});
@@ -69,6 +70,39 @@ assert.equal(dataV3.routeLine.id,'3');
 assert.equal(dataV3.route.length,1);
 assert.equal(back(),true);assert.equal(dataV3.routeLine,null);
 assert.equal(back(),true);assert.equal(get(),'more');
+// Pasos de la selección en Paradas: Atrás debe deshacer cada selector,
+// incluso después de consultar la llegada.
+go('lines');go('stops');
+root.scrollTop=200;
+vm.runInContext('rememberStopStep()',ctx);
+dataV3.locality='QUILMES';
+root.scrollTop=220;
+vm.runInContext('rememberStopStep()',ctx);
+dataV3.street='1';dataV3.crossings=[{id:'25',nombre:'Primera esquina'}];
+root.scrollTop=240;
+vm.runInContext('rememberStopStep()',ctx);
+dataV3.crossing='0';dataV3.stops=[{id:'A'}];
+go('arrival');
+assert.equal(back(),true);assert.equal(get(),'stops');
+assert.equal(dataV3.crossing,'0');
+assert.match(arrow(),/Volver al paso anterior/);
+assert.equal(back(),true);assert.equal(dataV3.crossing,null);
+assert.equal(root.scrollTop,240);
+assert.equal(back(),true);assert.equal(dataV3.street,null);
+assert.equal(dataV3.locality,'QUILMES');
+assert.equal(root.scrollTop,220);
+assert.equal(back(),true);assert.equal(dataV3.locality,null);
+assert.equal(root.scrollTop,200);
+assert.equal(back(),true);assert.equal(get(),'lines','Sin pasos pendientes, vuelve a lista de líneas');
+// Volver desde otra pestaña restaura los pasos de la pantalla anterior.
+go('stops');
+vm.runInContext('rememberStopStep()',ctx);
+dataV3.locality='BERAZATEGUI';
+go('near');
+assert.equal(back(),true);assert.equal(get(),'stops');
+assert.equal(dataV3.locality,'BERAZATEGUI');
+assert.equal(back(),true);assert.equal(get(),'stops');
+assert.equal(dataV3.locality,null);
 // La navegación por pestañas respeta el mismo historial sin bucles.
 go('home');assert.equal(back(),true);assert.equal(get(),'more');
 for(let i=0;i<90;i++)go(i%2?'lines':'home');
