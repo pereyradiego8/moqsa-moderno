@@ -81,7 +81,7 @@ class MapActivity : Activity() {
                 }
                 map.overlays.add(Marker(map).apply {
                     position = pt
-                    title = label
+                    setTitle(label)
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                 })
             }
