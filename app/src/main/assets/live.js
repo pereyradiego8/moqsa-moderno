@@ -236,9 +236,10 @@ function diagnosticPanel(){
 // La ETA puede ser "24 min. aprox." o un mensaje no numérico del servicio.
 function etaParts(raw){
  const value=String(raw||'Sin estimación').trim();
- const m=value.match(/^(\\d{1,4})\\s*min(?:\\.|utos?)?\\s*(.*)$/i);
+ const m=value.match(/^(\d{1,4})\s*min(?:\.|utos?)?\s*(.*)$/i);
  if(!m)return {number:'',suffix:value};
- return {number:m[1],suffix:'min'+(m[2]?'. '+m[2].replace(/^\\.\\s*/, ''):'.')};
+ const extra=m[2].replace(/^\.\s*/,'').trim();
+ return {number:m[1],suffix:'min.'+(extra?' '+extra:'')};
 }
 function arrivalCard(a,i){
  const eta=etaParts(a.arribo);
