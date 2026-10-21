@@ -18,6 +18,8 @@ jobs:
           node-version: '22'
       - name: Validar JavaScript
         run: node --check app/src/main/assets/live.js
+      - name: Validar localidades y sentidos
+        run: node scripts/check-ui.mjs
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
