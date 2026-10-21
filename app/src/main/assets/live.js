@@ -1,11 +1,11 @@
 'use strict';
 /* Nueva experiencia V3: datos de servicio, jamás líneas ni arribos simulados. */
-const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],otherArrivals:[],otherLoading:false,otherNotice:'',otherPartial:false,otherRequestId:0,route:[],routeLine:null,routeQuery:'',routeLoading:false,routeError:'',routeRequestId:0,routeVariant:0,routeMapLoading:false,routeMapError:'',routeListScroll:0,routeRefreshing:false,routeRefreshStatus:'',routeRefreshError:'',line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearAccuracy:null,nearDiagnostic:null,nearError:'',nearLoading:false,nearStop:null,nearStopArrivals:[],nearStopMessage:'',nearStopError:'',nearStopLoading:false,nearStopPartial:false,nearStopRequestId:0,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
+const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],otherArrivals:[],otherLoading:false,otherNotice:'',otherPartial:false,otherRequestId:0,route:[],routeLine:null,routeQuery:'',routeLoading:false,routeError:'',routeRequestId:0,routeVariant:0,routeMapLoading:false,routeMapError:'',routeAddresses:{},routeAddressPending:false,routeListScroll:0,routeRefreshing:false,routeRefreshStatus:'',routeRefreshError:'',line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearAccuracy:null,nearDiagnostic:null,nearError:'',nearLoading:false,nearStop:null,nearStopArrivals:[],nearStopMessage:'',nearStopError:'',nearStopLoading:false,nearStopPartial:false,nearStopRequestId:0,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
 const calls=new Map();let callNo=0;
 function native(action,params={}){
  return new Promise((resolve,reject)=>{
   if(!window.AndroidApi){reject(Error('Abrí el APK Android para realizar consultas reales.'));return;}
-  const id=++callNo,t=setTimeout(()=>{calls.delete(id);reject(Error('Se agotó el tiempo de espera de la consulta.'));},action==="nearby"||action==="nearbyArrivals"||action==="route"?85000:25000);
+  const id=++callNo,t=setTimeout(()=>{calls.delete(id);reject(Error('Se agotó el tiempo de espera de la consulta.'));},action==="nearby"||action==="nearbyArrivals"||action==="route"?85000:action==="route.addresses"?65000:25000);
   calls.set(id,{resolve,reject,t});
   try{window.AndroidApi.call(id,action,JSON.stringify(params));}catch(e){clearTimeout(t);calls.delete(id);reject(e);}
  });
@@ -158,18 +158,67 @@ function routeVariants(){
  const realBranches=entries.length>1 && entries.length<=80 &&
   entries.every(([name])=>Boolean(name)) &&
   entries.filter(([,pts])=>pts.length>=2).length>=Math.ceil(entries.length*.7);
- if(!realBranches)return [{label:'Recorrido completo',points:all}];
+ if(!realBranches)return [{label:'Recorrido completo',name:String(all[0]?.nombre||''),points:all}];
  const candidates=entries.map(([name,points],index)=>({name,points,length:routeDistance(points),index}))
   .filter(v=>v.points.length>=2 && v.length>=100)
   .sort((a,b)=>Math.abs(b.length-a.length)<Math.max(a.length,b.length)*.03?
     a.index-b.index:b.length-a.length);
- if(!candidates.length)return [{label:'Recorrido completo',points:all}];
+ if(!candidates.length)return [{label:'Recorrido completo',name:String(all[0]?.nombre||''),points:all}];
  const ida=candidates[0];
  const vuelta=candidates.filter(c=>c!==ida && c.length>=ida.length*.45 && routeIsReturn(ida,c))
   .sort((a,b)=>b.length-a.length)[0];
- const output=[{label:vuelta?'Ida':'Recorrido completo',points:ida.points}];
- if(vuelta)output.push({label:'Vuelta',points:vuelta.points});
+ const output=[{label:vuelta?'Ida':'Recorrido completo',name:ida.name,points:ida.points}];
+ if(vuelta)output.push({label:'Vuelta',name:vuelta.name,points:vuelta.points});
  return output;
+}
+function routeTerminalHints(name){
+ const raw=String(name||'').trim();
+ const segment=(raw.includes(';')?raw.split(';').slice(1).join(';'):raw).trim();
+ const candidates=segment.split(/\s*-\s*/).map(x=>x.trim().replace(/\s*\(EXP\)\s*$/i,''));
+ if(candidates.length!==2||candidates.some(x=>x.length<3||/^(IDA|VUELTA|RECORRIDO)$/i.test(x)))return ['',''];
+ return candidates;
+}
+function routeEndpointInfo(variant,index,end){
+ const point=end==='start'?variant.points[0]:variant.points[variant.points.length-1];
+ const geocoded=dataV3.routeAddresses[String(index)+':'+end]||{};
+ const street=String(point?.callePrincipal||geocoded.street||'').trim();
+ const intersection=String(point?.cruce1||geocoded.intersection||'').trim();
+ const directAddress=String(point?.direccion||'').trim();
+ const hint=routeTerminalHints(variant.name)[end==='start'?0:1];
+ if(street)return {title:street+(intersection?' y '+intersection:''),
+  note:intersection?'Calle e intersección informadas':'Intersección no informada'};
+ if(directAddress)return {title:directAddress,note:'Intersección no informada'};
+ if(hint)return {title:hint,note:'Referencia del recorrido · calle e intersección no informadas'};
+ return {title:end==='start'?'Origen no identificado':'Destino no identificado',
+  note:'Calle e intersección no informadas'};
+}
+async function loadRouteAddresses(requestId){
+ const variants=routeVariants();
+ const points=[];
+ for(const variant of variants){
+  if(!variant.points.length)continue;
+  points.push({lat:variant.points[0].lat,lon:variant.points[0].lon});
+  const last=variant.points[variant.points.length-1];
+  points.push({lat:last.lat,lon:last.lon});
+ }
+ if(!points.length)return;
+ dataV3.routeAddressPending=true;render();
+ try{
+  const result=await native('route.addresses',{points});
+  if(requestId!==dataV3.routeRequestId||screen!=='routes'||!dataV3.routeLine)return;
+  if(Array.isArray(result?.items)){
+   const addresses={};
+   for(let i=0;i<result.items.length;i++)
+    addresses[Math.floor(i/2)+':'+(i%2?'end':'start')]=result.items[i];
+   dataV3.routeAddresses=addresses;
+  }
+ }catch(_){}
+ finally{
+  if(requestId===dataV3.routeRequestId&&dataV3.routeLine){
+   dataV3.routeAddressPending=false;
+   if(screen==='routes')render();
+  }
+ }
 }
 function chooseRouteVariant(index){
  const variants=routeVariants();
@@ -202,8 +251,9 @@ async function openRouteMap(){
  }
  dataV3.routeMapLoading=true;dataV3.routeMapError='';render();
  const branch=routeVariants()[dataV3.routeVariant];
- const title='Recorrido · '+String(dataV3.routeLine.nombre||dataV3.routeLine.id)+
-  (routeVariants().length>1?' · '+branch.label:'');
+ const from=routeEndpointInfo(branch,dataV3.routeVariant,'start').title;
+ const to=routeEndpointInfo(branch,dataV3.routeVariant,'end').title;
+ const title='Línea '+String(dataV3.routeLine.nombre||dataV3.routeLine.id)+' · '+from+' → '+to;
  try{
   await native('map.show',{type:'route',title,points});
  }catch(e){
@@ -218,6 +268,7 @@ async function loadRoute(){
  if(!selected)return;
  const requestId=++dataV3.routeRequestId;
  dataV3.route=[];dataV3.routeVariant=0;dataV3.routeLoading=true;dataV3.routeError='';dataV3.routeMapError='';
+ dataV3.routeAddresses={};dataV3.routeAddressPending=false;
  render();
  try{
   const response=await native('route',{linea:selected.id,isSublinea:Boolean(selected.isSublinea)});
@@ -231,6 +282,7 @@ async function loadRoute(){
  }
  dataV3.routeLoading=false;
  render();
+ if(!dataV3.routeError&&requestId===dataV3.routeRequestId)void loadRouteAddresses(requestId);
 }
 function mainV3(){
  return '<div class="greeting"><div class="eyebrow">TU VIAJE, MÁS SIMPLE</div><h2>¿A dónde<br>vamos hoy?</h2><p>Encontrá el colectivo y su parada sin perder tiempo.</p></div>'+
@@ -479,7 +531,7 @@ function chooseRouteLine(i){
  dataV3.routeListScroll=typeof root!=='undefined'&&root?root.scrollTop:0;
  dataV3.routeLine=selected;
  dataV3.route=[];dataV3.routeLoading=false;dataV3.routeError='';dataV3.routeMapError='';
- dataV3.routeVariant=0;
+ dataV3.routeVariant=0;dataV3.routeAddresses={};dataV3.routeAddressPending=false;
  render();
  routeScrollToTop();
  void loadRoute();
@@ -487,7 +539,7 @@ function chooseRouteLine(i){
 function backToRouteLines(){
  dataV3.routeRequestId++;
  dataV3.routeLine=null;dataV3.route=[];dataV3.routeLoading=false;dataV3.routeError='';dataV3.routeMapError='';
- dataV3.routeVariant=0;
+ dataV3.routeVariant=0;dataV3.routeAddresses={};dataV3.routeAddressPending=false;
  render();
  if(typeof root!=='undefined'&&root)root.scrollTop=dataV3.routeListScroll||0;
 }
@@ -532,12 +584,20 @@ function routesV3(){
   if(dataV3.routeLoading)out+='<p class="route-loading">Consultando el recorrido…</p>';
   else if(dataV3.routeError)out+='<p class="route-error">'+clean(dataV3.routeError)+'</p>';
   else if(variants.length){
-   out+='<p>'+(variants.length>1?'Elegí Ida o Vuelta para ver el trayecto completo.':
-    'El servicio solo permite identificar un trazado completo para esta línea.')+'</p>'+
-    '<div class="route-variants" role="group" aria-label="Ramal o sentido del recorrido">';
-   out+=variants.map((r,i)=>'<button class="chip '+(dataV3.routeVariant===i?'selected':'')+
-    '" onclick="chooseRouteVariant('+i+')" aria-pressed="'+(dataV3.routeVariant===i?'true':'false')+'">'+
-    clean(r.label)+'</button>').join('')+'</div>';
+   out+='<p>'+(variants.length>1?'Elegí el recorrido según dónde comienza y termina.':
+    'Este es el trayecto completo disponible para la línea.')+'</p>'+
+    '<div class="route-directions" role="group" aria-label="Origen y destino del recorrido">';
+   out+=variants.map((r,i)=>{
+    const from=routeEndpointInfo(r,i,'start'),to=routeEndpointInfo(r,i,'end');
+    return '<button class="route-direction '+(dataV3.routeVariant===i?'selected':'')+
+     '" onclick="chooseRouteVariant('+i+')" aria-pressed="'+(dataV3.routeVariant===i?'true':'false')+'">'+
+     '<span class="route-place"><span class="route-place-label">SALE DE</span>'+
+     '<strong>'+clean(from.title)+'</strong><small>'+clean(from.note)+'</small></span>'+
+     '<span class="route-arrow" aria-hidden="true">'+I('arrow')+'</span>'+
+     '<span class="route-place"><span class="route-place-label">LLEGA A</span>'+
+     '<strong>'+clean(to.title)+'</strong><small>'+clean(to.note)+'</small></span></button>';
+   }).join('')+'</div>'+
+   (dataV3.routeAddressPending?'<p class="route-geocode-status" aria-live="polite">Buscando las calles de origen y destino…</p>':'');
    const current=variants[dataV3.routeVariant]||variants[0];
    out+='<p>Trayecto completo de origen a destino.</p>'+
     '<button class="primary map-action" onclick="openRouteMap()" '+
@@ -840,7 +900,8 @@ function snapshotNavScreen(){
  if(screen==='routes'){
   previous.route={
    line:dataV3.routeLine,items:dataV3.route,query:dataV3.routeQuery,
-   variant:dataV3.routeVariant,error:dataV3.routeError,mapError:dataV3.routeMapError
+   variant:dataV3.routeVariant,error:dataV3.routeError,mapError:dataV3.routeMapError,
+   addresses:dataV3.routeAddresses
   };
  }
  return previous;
@@ -864,6 +925,8 @@ function restoreNavScreen(entry){
   dataV3.routeVariant=entry.route.variant||0;
   dataV3.routeError=entry.route.error||'';
   dataV3.routeMapError=entry.route.mapError||'';
+  dataV3.routeAddresses=entry.route.addresses||{};
+  dataV3.routeAddressPending=false;
   dataV3.routeLoading=false;
   dataV3.routeMapLoading=false;
  }
@@ -876,7 +939,9 @@ function resetRouteSelection(){
  dataV3.routeRequestId++;
  dataV3.routeLine=null;dataV3.routeQuery='';dataV3.route=[];
  dataV3.routeLoading=false;dataV3.routeError='';dataV3.routeVariant=0;
+ dataV3.routeAddresses={};dataV3.routeAddressPending=false;
  dataV3.routeMapLoading=false;dataV3.routeMapError='';
+ dataV3.routeAddresses={};dataV3.routeAddressPending=false;
  dataV3.routeListScroll=0;
 }
 // Cada navegación nueva crea un nivel. Se recupera el desplazamiento al volver.

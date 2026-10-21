@@ -436,6 +436,11 @@ class OriginalSoap(private val settings: DirectSettings) {
                     normalized.put("nombre",str(obj,"Descripcion","Nombre"))
                     normalized.put("lat",number(obj,"Latitud","Latitude","LatitudParada"))
                     normalized.put("lon",number(obj,"Longitud","Longitude","LongitudParada"))
+                    // Preservar dirección e intersecciones si el proveedor las envía.
+                    normalized.put("callePrincipal",str(obj,"CallePrincipal","NombreCalle"))
+                    normalized.put("cruce1",str(obj,"CalleInterseccion","InterseccionCalle"))
+                    normalized.put("cruce2",str(obj,"CalleInterseccion2","SegundaInterseccion"))
+                    normalized.put("direccion",str(obj,"Direccion","DireccionParada"))
                 }
             }
             if (kind == "arrivals" ||

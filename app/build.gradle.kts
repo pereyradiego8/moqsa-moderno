@@ -10,8 +10,8 @@ android {
         applicationId = "ar.com.colectivos.consulta"
         minSdk = 26
         targetSdk = 34
-        versionCode = 12
-        versionName = "0.12.0-beta"
+        versionCode = 13
+        versionName = "0.13.0-beta"
     }
     buildTypes { release { isMinifyEnabled = false } }
     compileOptions {
