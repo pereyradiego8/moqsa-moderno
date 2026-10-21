@@ -10,8 +10,8 @@ android {
         applicationId = "ar.com.colectivos.consulta"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.2.0-beta"
+        versionCode = 4
+        versionName = "0.4.0-beta"
     }
     buildTypes { release { isMinifyEnabled = false } }
     compileOptions {
@@ -19,4 +19,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+}
+
+dependencies {
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
 }
