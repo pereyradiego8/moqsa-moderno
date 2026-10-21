@@ -30,10 +30,10 @@ assert.ok(a>=0&&b>a,'Helpers de dirección y orden temporal');
 const ctx=vm.createContext({});
 vm.runInContext(src.slice(a,b),ctx);
 function run(cmd){return vm.runInContext(cmd,ctx);}
-const withCross=run("nearbyStopLocation({callePrincipal:'Maipú',cruce1:'Corrientes',cruce2:'Sarmiento',altura:'272',identificador:'MO-01080'})");
-assert.equal(withCross.street,'Maipú');
-assert.equal(withCross.details,'Entre Corrientes y Sarmiento');
-assert.equal(withCross.at,'Altura 272');
+const withCross=run("nearbyStopLocation({callePrincipal:'Calle Principal',cruce1:'Calle A',cruce2:'Calle B',altura:'123',identificador:'MO-01080'})");
+assert.equal(withCross.street,'Calle Principal');
+assert.equal(withCross.details,'Entre Calle A y Calle B');
+assert.equal(withCross.at,'Altura 123');
 const one=run("nearbyStopLocation({callePrincipal:'Calle 24',cruce1:'Calle 142'})");
 assert.equal(one.details,'Cruce con Calle 142');
 const unidentified=run("nearbyStopLocation({nombre:'MO-01574',identificador:'MO-01574'})");
