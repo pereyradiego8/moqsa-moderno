@@ -26,6 +26,8 @@ jobs:
         run: node scripts/check-ui.mjs
       - name: Verificar mapas y accesibilidad de arribos
         run: node scripts/check-maps.mjs
+      - name: Comprobar tiempos, localidades y Cercanía GPS
+        run: node scripts/check-ux.mjs
       - name: Validar historial de navegación
         run: node scripts/check-navigation.mjs
       - uses: actions/setup-java@v4
