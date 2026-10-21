@@ -125,6 +125,9 @@ class OriginalSoap(private val settings: DirectSettings) {
             }
             "nearby" -> {
                 operation = "RecuperarParadasMasCercanasPorLocalidadProvinciaPais"
+                // Respetar el orden del WSDL: usuario, clave, latitud, longitud...
+                params["usuario"] = user
+                params["clave"] = pass
                 params["latitud"] = required(q, "lat")
                 params["longitud"] = required(q, "lon")
                 params["listaCodigosEmpresa"] = companyCode
@@ -136,7 +139,7 @@ class OriginalSoap(private val settings: DirectSettings) {
             }
             else -> throw IllegalArgumentException("Operación SOAP desconocida")
         }
-        if (action != "lines") {
+        if (action != "lines" && action != "nearby") {
             params["usuario"] = user
             params["clave"] = pass
         }
