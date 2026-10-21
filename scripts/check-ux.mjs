@@ -58,3 +58,12 @@ assert.ok(soap.includes('"latParada"')&&soap.includes('"lonParada"'));
 assert.ok(soap.includes('RecuperarParadasMasCercanasPorLocalidadProvinciaPais'));
 assert.ok(soap.includes('params["localidad"] = "QUILMES"'),'Current working arrival city remains unchanged');
 console.log('OK: 9/24 ETA, coordinates of selected stop, map types, GPS consent, city selector, numeric street order, original SOAP');
+
+assert.ok(soap.includes('registrosOriginales')&&soap.includes('registrosInterpretados'),'El SOAP debe devolver cuántas paradas informa y cuántas pudo interpretar');
+assert.ok(source.includes('function nearbyStateCard()'),'Cerca debe mostrar el diagnóstico al usuario');
+assert.ok(source.includes('Precisión estimada del GPS'),'Cerca debe avisar de imprecisión');
+assert.ok(source.includes('El servidor original respondió sin paradas'),'No confundir cero respuestas con GPS apagado');
+assert.ok(source.includes('La respuesta tiene paradas, pero esta versión no pudo interpretarlas'),'Distinguir errores del parser');
+assert.ok(source.includes('Comprobar mi ubicación en el mapa'),'Permitir confirmar en el mapa el punto recibido del teléfono');
+assert.ok(source.includes('Buscar paradas por línea'),'Alternativa sin depender de GPS ni resultados cercanos');
+console.log('OK: diagnóstico cercano distingue GPS, servidor sin cobertura y parseo inválido.');
