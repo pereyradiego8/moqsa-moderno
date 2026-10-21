@@ -58,3 +58,14 @@ También se retiró el control de referencia `línea 77 / MO-01080`, que corresp
 - Los mapas usan únicamente coordenadas reales presentes en la respuesta SOAP. Si el servicio carece de ellas, la aplicación lo informa. OpenStreetMap suministra solo el fondo cartográfico, no las llegadas.
 - El botón **Cerca** y algunas funciones no relacionadas con mapas siguen pendientes; no mostrar información falsa.
 - La incorporación de osmdroid requiere validar nueva compilación Android y arranque. Conservar la APK anterior que ya devuelve arribos correctos hasta probar esta versión.
+
+## Ajustes de UX, mapas y Cerca (21/10/2026)
+
+- **Llegadas:** la ETA ahora separa el número de minutos de la unidad; el número de línea y su destino quedan en una columna estable, sin saltar a una fila inesperada en teléfonos angostos. No se alteró la operación SOAP de arribos.
+- **Mapa de llegadas:** si una parada no trae coordenadas propias, se recuperan `LatParada` y `LongParada` de los arribos. Marcadores distintos: **P** verde parada, **C** azul colectivo, **YO** naranja ubicación del usuario.
+- **Selección por localidad:** después de elegir una línea, se elige localidad → calle → intersección. Localidades, calles y cruces se ordenan mediante el comparador español con orden numérico natural. Las localidades se extraen de los nombres de calles informados por el servidor de transporte; no se inventa un catálogo municipal.
+- **Cerca:** solicita permiso de ubicación al tocar Buscar, utiliza GPS/red del dispositivo y llama directamente a `RecuperarParadasMasCercanasPorLocalidadProvinciaPais` en el SOAP original. Ordena resultados por distancia cuando hay coordenadas. Abrir una parada para consultar arribos requiere que la respuesta incluya identificadores reales de línea y parada.
+- **Sin servidores intermedios:** el servicio de transporte sigue siendo exclusivamente el SOAP original. OpenStreetMap se usa para descargar teselas del mapa, sin proporcionar tiempos de llegada.
+- **Pruebas:** `scripts/check-ux.mjs` valida tiempos, localidades, coordenadas y ubicación bajo demanda; compilación y arranque en Android verificados. El funcionamiento de GPS, la identificación de paradas y la representación real de recorridos requieren pruebas en un teléfono.
+
+**Conservar la última APK funcional como respaldo** hasta confirmar los resultados de Cerca y mapas en el dispositivo real.
