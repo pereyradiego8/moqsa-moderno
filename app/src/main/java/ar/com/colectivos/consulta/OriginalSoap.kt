@@ -3,12 +3,12 @@ package ar.com.colectivos.consulta
 import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
+import android.util.Xml
+import org.xmlpull.v1.XmlPullParser
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import javax.xml.XMLConstants
-import javax.xml.parsers.DocumentBuilderFactory
 
 /**
  * Cliente directo al WebService del APK MOQSA 1.7. No consulta servidores intermedios.
@@ -109,22 +109,42 @@ class OriginalSoap(private val settings: DirectSettings) {
                     response.write(buffer, 0, count)
                 }
             }
-            val factory = DocumentBuilderFactory.newInstance()
-            factory.isNamespaceAware = true
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
-            factory.setFeature("http://xml.org/sax/features/external-general-entities", false)
-            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
-            factory.isXIncludeAware = false
-            factory.isExpandEntityReferences = false
-            runCatching { factory.setAttribute("http://javax.xml.XMLConstants/property/accessExternalDTD", "") }
-            runCatching { factory.setAttribute("http://javax.xml.XMLConstants/property/accessExternalSchema", "") }
-            val doc = factory.newDocumentBuilder().parse(ByteArrayInputStream(response.toByteArray()))
-            if (doc.getElementsByTagNameNS("*", "Fault").length > 0)
-                throw IllegalStateException("El proveedor devolvió un error SOAP")
-            val result = doc.getElementsByTagNameNS("*", operation + "Result")
-            if (result.length == 0) throw IllegalStateException("No se encontró el resultado de " + operation)
-            val raw = result.item(0).textContent?.trim() ?: ""
+            val responseXml = String(response.toByteArray(), Charsets.UTF_8)
+            // No cargar declaraciones DTD ni entidades XML remotas o internas.
+            if (responseXml.contains("<!DOCTYPE", ignoreCase = true) ||
+                responseXml.contains("<!ENTITY", ignoreCase = true))
+                throw IllegalStateException("El servicio devolvió XML con entidades no permitidas")
+            val parser = Xml.newPullParser()
+            parser.setInput(ByteArrayInputStream(response.toByteArray()), "UTF-8")
+            var raw: String? = null
+            var insideResult = false
+            val resultText = StringBuilder()
+            var depth = 0
+            var event = parser.eventType
+            while (event != XmlPullParser.END_DOCUMENT) {
+                when (event) {
+                    XmlPullParser.DOCDECL ->
+                        throw IllegalStateException("El servidor devolvió un documento XML con DTD")
+                    XmlPullParser.START_TAG -> {
+                        if (parser.name == "Fault") throw IllegalStateException("El proveedor devolvió un error SOAP")
+                        if (!insideResult && parser.name == operation + "Result") {
+                            insideResult = true
+                            depth = parser.depth
+                        }
+                    }
+                    XmlPullParser.TEXT, XmlPullParser.CDSECT -> {
+                        if (insideResult) resultText.append(parser.text ?: "")
+                    }
+                    XmlPullParser.END_TAG -> {
+                        if (insideResult && parser.depth == depth && parser.name == operation + "Result") {
+                            raw = resultText.toString().trim()
+                            break
+                        }
+                    }
+                }
+                event = parser.next()
+            }
+            if (raw == null) throw IllegalStateException("El servicio no devolvió el resultado SOAP esperado")
             val payload = decode(raw)
             return JSONObject().put("ok", true).put("items", normalize(action, payload))
                 .put("mensaje", value(payload, "MensajeEstado", "mensajeEstado", "mensaje")?.toString() ?: "")
