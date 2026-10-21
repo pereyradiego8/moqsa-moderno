@@ -158,15 +158,15 @@ function routeVariants(){
  const realBranches=entries.length>1 && entries.length<=80 &&
   entries.every(([name])=>Boolean(name)) &&
   entries.filter(([,pts])=>pts.length>=2).length>=Math.ceil(entries.length*.7);
- if(!realBranches)return [{label:'Ida',points:all}];
+ if(!realBranches)return [{label:'Recorrido completo',points:all}];
  const candidates=entries.map(([name,points])=>({name,points,length:routeDistance(points)}))
   .filter(v=>v.points.length>=2 && v.length>=100)
   .sort((a,b)=>b.length-a.length);
- if(!candidates.length)return [{label:'Ida',points:all}];
+ if(!candidates.length)return [{label:'Recorrido completo',points:all}];
  const ida=candidates[0];
  const vuelta=candidates.filter(c=>c!==ida && c.length>=ida.length*.45 && routeIsReturn(ida,c))
   .sort((a,b)=>b.length-a.length)[0];
- const output=[{label:'Ida',points:ida.points}];
+ const output=[{label:vuelta?'Ida':'Recorrido completo',points:ida.points}];
  if(vuelta)output.push({label:'Vuelta',points:vuelta.points});
  return output;
 }
@@ -175,7 +175,8 @@ function chooseRouteVariant(index){
  const i=Number(index);
  if(!Number.isInteger(i)||i<0||i>=variants.length)return;
  dataV3.routeVariant=i;dataV3.routeMapError='';
- render();routeScrollToTop();
+ const offset=typeof root!=='undefined'&&root?root.scrollTop:0;
+ render();if(typeof root!=='undefined'&&root)root.scrollTop=offset;
 }
 function routeMapPoints(){
  const selected=routeVariants()[dataV3.routeVariant];
@@ -531,7 +532,7 @@ function routesV3(){
   else if(dataV3.routeError)out+='<p class="route-error">'+clean(dataV3.routeError)+'</p>';
   else if(variants.length){
    out+='<p>'+(variants.length>1?'Elegí Ida o Vuelta para ver el trayecto completo.':
-    'El servicio solo permite identificar un sentido completo para esta línea.')+'</p>'+
+    'El servicio solo permite identificar un trazado completo para esta línea.')+'</p>'+
     '<div class="route-variants" role="group" aria-label="Ramal o sentido del recorrido">';
    out+=variants.map((r,i)=>'<button class="chip '+(dataV3.routeVariant===i?'selected':'')+
     '" onclick="chooseRouteVariant('+i+')" aria-pressed="'+(dataV3.routeVariant===i?'true':'false')+'">'+
