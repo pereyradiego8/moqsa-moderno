@@ -112,8 +112,10 @@ async function loadArrivals(){
 async function diagnoseArrivals(){
  if(!dataV3.stop||!dataV3.line)return;
  dataV3.diagnosticando=true;dataV3.diagnostico=null;render();
- try{dataV3.diagnostico=await native('diagnose.arrivals');}
- catch(e){dataV3.diagnostico={estado:'consulta_fallida',respuesta:e.message||'Error sin detalle'};}
+ try{
+  const result=await native('arrivals',{linea:'77',parada:'MO-01080'});
+  dataV3.diagnostico={estado:'respuesta_recibida',cantidad:Array.isArray(result.items)?result.items.length:0,respuesta:String(result.mensaje||'OK')};
+ }catch(e){dataV3.diagnostico={estado:'consulta_fallida',respuesta:e.message||'Error sin detalle'};}
  dataV3.diagnosticando=false;render();
 }
 function diagnosticPanel(){
