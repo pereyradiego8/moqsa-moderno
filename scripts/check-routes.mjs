@@ -29,6 +29,7 @@ const ctx=vm.createContext({
  back:()=>'',notice:msg=>'Aviso '+msg,
  empty:msg=>'Sin '+msg,feedback:()=>'',I:x=>x,
  item:(name,description,action)=>'[Línea '+name+' '+action+']',
+ root:{scrollTop:340},
  document:{getElementById:id=>elements[id]||null},
  window:{},
  PAGES:Object.fromEntries(['home','lines','stops','routes','more'].map(k=>[k,k])),
@@ -59,6 +60,7 @@ assert.equal(dataV3.line.id,'99');
 
 // Elegir una línea dispara su propio servicio de recorridos.
 call('chooseRouteLine(1)');
+assert.equal(ctx.root.scrollTop,0,'La selección vuelve arriba desde el final del catálogo');
 assert.equal(dataV3.routeLine.nombre,'619');
 assert.equal(dataV3.routeQuery,'');
 assert.equal(pending[0].action,'route');
@@ -77,6 +79,8 @@ assert.equal(dataV3.route[0].nombre,'Trayecto correcto');
 call('openRouteMap()');
 assert.match(maps[0][1],/65/);
 assert.equal(dataV3.line.id,'99','La selección de paradas no debe cambiar');
+call('backToRouteLines()');
+assert.equal(dataV3.routeLine,null,'Volver al catálogo no cambia la línea de paradas');
 
 // Volver a entrar desde cualquier pantalla vuelve a mostrar todas las líneas.
 vm.runInContext("let screen='stops';function go(key){screen=key;}function back(){return '';}",ctx);
@@ -86,4 +90,15 @@ assert.equal(dataV3.routeLine,null);
 assert.equal(dataV3.route.length,0);
 assert.equal(dataV3.routeQuery,'');
 assert.match(call('routesV3()'),/Todas las líneas/);
+assert.match(call('routesV3()'),/refreshRouteLines\(\)/,'Actualizar debe ejecutar la consulta visible');
+ctx.screen='routes';
+ctx.root.scrollTop=270;
+const updating=call('refreshRouteLines()');
+assert.equal(pending[2].action,'lines');
+assert.match(dataV3.routeRefreshStatus,/Actualizando/);
+pending[2].resolve({items:[{id:'4',nombre:'584'},{id:'5',nombre:'603'}]});
+await updating;
+assert.equal(dataV3.lines.length,2);
+assert.match(dataV3.routeRefreshStatus,/Lista actualizada/);
+assert.equal(ctx.root.scrollTop,270,'Actualizar no debe desplazar el catálogo');
 console.log('OK: catálogo de recorridos independiente, filtro, selección, mapa y respuestas antiguas.');
