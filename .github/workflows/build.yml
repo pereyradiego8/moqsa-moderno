@@ -28,6 +28,8 @@ jobs:
         run: node scripts/check-maps.mjs
       - name: Comprobar tiempos, localidades y Cercanía GPS
         run: node scripts/check-ux.mjs
+      - name: Validar ficha Cerca sin selección de línea
+        run: node scripts/check-nearby-stop.mjs
       - name: Validar historial de navegación
         run: node scripts/check-navigation.mjs
       - uses: actions/setup-java@v4
