@@ -1,6 +1,6 @@
 'use strict';
 /* Nueva experiencia V3: datos de servicio, jamás líneas ni arribos simulados. */
-const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],route:[],line:null,street:null,crossing:null,stop:null,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
+const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],route:[],line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearError:'',nearLoading:false,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
 const calls=new Map();let callNo=0;
 function native(action,params={}){
  return new Promise((resolve,reject)=>{
@@ -55,15 +55,31 @@ function stopSubtitle(r){
  const internal=String(r.codigoInterno||r.id||'').trim();
  return [street,id?'Parada '+id:internal?'Código interno '+internal+' · identificador no informado':'Identificador no informado'].filter(Boolean).join(' · ');
 }
-// Coordenadas provistas por SOAP: nunca completamos coordenadas aproximadas.
-function validGeoPoint(v,label){
+// Coordenadas exclusivas del SOAP original. Las teselas de OSM sólo son el fondo.
+function validGeoPoint(v,label,type='stop'){
  const lat=Number(v?.lat),lon=Number(v?.lon);
  if(v?.lat==null||v?.lon==null||!Number.isFinite(lat)||!Number.isFinite(lon)||
     Math.abs(lat)>90||Math.abs(lon)>180||(lat===0&&lon===0))return null;
- return {lat,lon,nombre:String(label||v?.nombre||'Parada').slice(0,95)};
+ return {lat,lon,nombre:String(label||v?.nombre||'Parada').slice(0,95),tipo:type};
 }
-function geoPoints(list,nameFn){
- return (Array.isArray(list)?list:[]).map((v,i)=>validGeoPoint(v,nameFn?nameFn(v,i):'')).filter(Boolean).slice(0,1200);
+function geoPoints(list,nameFn,type='stop'){
+ return (Array.isArray(list)?list:[]).map((v,i)=>validGeoPoint(v,nameFn?nameFn(v,i):'',type)).filter(Boolean).slice(0,1200);
+}
+function currentStopPoint(){
+ if(!dataV3.stop)return null;
+ const label='Parada '+(stopIdentifier(dataV3.stop)||'seleccionada');
+ const direct=validGeoPoint(dataV3.stop,label,'stop');
+ if(direct)return direct;
+ for(const arrival of dataV3.arrivals){
+  const result=validGeoPoint({lat:arrival.latParada,lon:arrival.lonParada},label,'stop');
+  if(result)return result;
+ }
+ return null;
+}
+function arrivalVehiclePoints(){
+ return geoPoints(dataV3.arrivals,a=>
+  (a.linea||dataV3.line?.nombre||'Colectivo')+' · '+
+  (a.destino||'')+' · '+(a.arribo||''),'bus');
 }
 async function openMap(type,title,points){
  if(!points.length){toast('El servicio no informó coordenadas para este mapa');return;}
@@ -71,15 +87,20 @@ async function openMap(type,title,points){
  catch(e){toast('No se pudo abrir el mapa: '+String(e.message||'Error'));}
 }
 function openStopsMap(){
- const points=geoPoints(dataV3.stops,s=>stopHeading(s));
+ const points=geoPoints(dataV3.stops,s=>stopHeading(s),'stop');
  openMap('stops','Paradas · '+String(dataV3.line?.nombre||''),points);
 }
 function openArrivalsMap(){
  if(!dataV3.stop)return;
- const stop=validGeoPoint(dataV3.stop,'Parada '+stopIdentifier(dataV3.stop));
- const buses=geoPoints(dataV3.arrivals,a=>(a.linea||dataV3.line?.nombre||'Colectivo')+' · '+(a.arribo||''));
- const points=[...(stop?[stop]:[]),...buses];
+ const stop=currentStopPoint();
+ const vehicles=arrivalVehiclePoints();
+ const points=[...(stop?[stop]:[]),...vehicles];
  openMap('stops','Próximas llegadas · '+String(dataV3.line?.nombre||''),points);
+}
+function openNearMap(){
+ const me=validGeoPoint(dataV3.nearLocation,'Mi ubicación','user');
+ const stops=geoPoints(dataV3.nearby,x=>stopHeading(x),'stop');
+ openMap('stops','Paradas cercanas',[...(me?[me]:[]),...stops]);
 }
 function openRouteMap(){
  const points=geoPoints(dataV3.route,(v,i)=>v.nombre||'Punto '+String(i+1));
@@ -177,15 +198,34 @@ function diagnosticPanel(){
  '<button class="secondary" onclick="moqsaGoBack()">Volver a la selección de paradas</button>'+
  '<p style="font-size:12px">Se muestran únicamente los códigos de la línea y parada seleccionadas; no se hacen consultas a otras líneas ni se exponen contraseñas.</p></div>';
 }
+// La ETA puede ser "24 min. aprox." o un mensaje no numérico del servicio.
+function etaParts(raw){
+ const value=String(raw||'Sin estimación').trim();
+ const m=value.match(/^(\\d{1,4})\\s*min(?:\\.|utos?)?\\s*(.*)$/i);
+ if(!m)return {number:'',suffix:value};
+ return {number:m[1],suffix:'min'+(m[2]?'. '+m[2].replace(/^\\.\\s*/, ''):'.')};
+}
+function arrivalCard(a,i){
+ const eta=etaParts(a.arribo);
+ const label=i===0?'PRÓXIMO':'SIGUIENTE';
+ const number=eta.number?
+  '<div class="eta-number">'+clean(eta.number)+'</div><span class="eta-unit">'+clean(eta.suffix)+'</span>':
+  '<div class="eta-other">'+clean(eta.suffix)+'</div>';
+ return '<div class="arrival-highlight">'+
+  '<div class="arrival-eta"><span class="eta-kicker">'+label+'</span>'+number+'</div>'+
+  '<div class="arrival-details"><strong class="arrival-line">Línea '+clean(a.linea||dataV3.line.nombre||'—')+'</strong>'+
+  '<span class="arrival-destination">'+clean(a.destino||'Destino no informado')+'</span>'+
+  '<span class="arrival-position">'+(validGeoPoint(a,'','bus')?'Ubicación disponible en mapa':'Sin posición GPS informada')+'</span></div></div>';
+}
 function arrivalsV3(){
  if(!dataV3.stop||!dataV3.line)return intro('Próximas llegadas','Elegí una parada primero.','ARRIBOS')+'<button class="primary" onclick="go(\'lines\')">Buscar línea</button>';
  let out=back('stops')+intro('Próximas llegadas',clean(dataV3.line.nombre||dataV3.line.id)+' · '+clean(stopHeading(dataV3.stop)),'DATOS REALES')+
  '<div class="card arrival-panel"><div class="cardhead"><h3>Próximos colectivos</h3><button class="favourite" onclick="toggleFavorite()" aria-label="Guardar esta parada">'+I('star')+'</button></div>';
  out+=dataV3.arrivals.length
- ? dataV3.arrivals.map((a,i)=>'<div class="arrival-highlight"><div class="arrival-eta"><span class="eta-kicker">'+(i===0?'PRÓXIMO COLECTIVO':'SIGUIENTE')+'</span><strong>'+clean(a.arribo||'Sin estimación')+'</strong></div><div class="arrival-details"><strong class="arrival-line">'+clean(a.linea||dataV3.line.nombre||'Colectivo')+'</strong><span class="arrival-destination">'+clean(a.destino||stopHeading(dataV3.stop))+'</span></div></div>').join('')
+ ? dataV3.arrivals.map(arrivalCard).join('')
  :(!dataV3.loading&&!dataV3.error?'<div class="screen-note"><strong>Sin estimaciones disponibles ahora.</strong><p>'+clean(dataV3.mensaje||'El servidor no envió tiempos para esta parada. Podés intentar de nuevo en unos minutos.')+'</p></div>':'');
  out+='</div><button class="primary" onclick="loadArrivals()">'+I('refresh')+' Actualizar llegadas</button>';
- if(validGeoPoint(dataV3.stop)||geoPoints(dataV3.arrivals).length)
+ if(currentStopPoint()||arrivalVehiclePoints().length)
     out+='<button class="secondary map-action" onclick="openArrivalsMap()">'+I('pin')+' Ubicar parada y colectivos en mapa</button>';
  return out+feedback()+diagnosticPanel();
 }
