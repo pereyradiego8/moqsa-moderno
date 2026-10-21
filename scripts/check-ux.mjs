@@ -62,8 +62,16 @@ console.log('OK: 9/24 ETA, coordinates of selected stop, map types, GPS consent,
 assert.ok(soap.includes('registrosOriginales')&&soap.includes('registrosInterpretados'),'El SOAP debe devolver cuántas paradas informa y cuántas pudo interpretar');
 assert.ok(source.includes('function nearbyStateCard()'),'Cerca debe mostrar el diagnóstico al usuario');
 assert.ok(source.includes('Precisión estimada del GPS'),'Cerca debe avisar de imprecisión');
-assert.ok(source.includes('El servidor original respondió sin paradas'),'No confundir cero respuestas con GPS apagado');
+assert.ok(source.includes('No hubo paradas en las respuestas válidas'),'No confundir cero respuestas con GPS apagado');
 assert.ok(source.includes('La respuesta tiene paradas, pero esta versión no pudo interpretarlas'),'Distinguir errores del parser');
 assert.ok(source.includes('Comprobar mi ubicación en el mapa'),'Permitir confirmar en el mapa el punto recibido del teléfono');
 assert.ok(source.includes('Buscar paradas por línea'),'Alternativa sin depender de GPS ni resultados cercanos');
 console.log('OK: diagnóstico cercano distingue GPS, servidor sin cobertura y parseo inválido.');
+
+assert.ok(soap.includes('params["isInteligente"] = "false"'),'El WSDL exige isInteligente');
+assert.ok(soap.includes('for (company in listOf("191", "7"))'),'La lista de empresas debe desdoblarse en códigos numéricos individuales');
+assert.ok(!soap.includes('params["listaCodigosEmpresa"] = "191,7"'),'No enviar el texto que devolvió FormatException');
+assert.ok(soap.includes('if (healthy == 0)'),'No afirmar cero paradas cuando fallan todas las consultas');
+assert.ok(source.includes('Resultado parcial.'),'Cerca debe informar respuestas incompletas');
+assert.ok(!source.includes('System.FormatException'),'La UI no debe mostrar errores .NET como ausencia de cobertura');
+console.log('OK: SOAP isInteligente, formato de empresa, error -9 y cobertura incierta.');
