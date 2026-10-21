@@ -27,6 +27,10 @@ jobs:
         run: gradle :app:assembleDebug --no-daemon
       - name: Recrear parche DEX sin secretos
         run: python scripts/patch_fake_creds.py app/build/outputs/apk/debug/app-debug.apk /tmp/moqsa-fake-unsigned.apk
+      - name: Generar certificado temporal del emulador
+        run: |
+          mkdir -p "$HOME/.android"
+          keytool -genkeypair -noprompt -storetype PKCS12 -alias androiddebugkey -keyalg RSA -keysize 2048 -keystore "$HOME/.android/debug.keystore" -storepass android -keypass android -validity 365 -dname 'CN=Android Test Only'
       - name: Firmar copia de prueba con apksigner
         run: |
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$HOME/.android/debug.keystore" --ks-pass pass:android --key-pass pass:android --v2-signing-enabled true --v3-signing-enabled true --out /tmp/moqsa-fake.apk /tmp/moqsa-fake-unsigned.apk
