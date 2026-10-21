@@ -104,7 +104,7 @@ assert.equal(dataV3.locality,'BERAZATEGUI');
 assert.equal(back(),true);assert.equal(get(),'stops');
 assert.equal(dataV3.locality,null);
 // La navegación por pestañas respeta el mismo historial sin bucles.
-go('home');assert.equal(back(),true);assert.equal(get(),'more');
+go('home');assert.equal(back(),true);assert.equal(get(),'stops','Volver desde Inicio respeta la pantalla realmente anterior');
 for(let i=0;i<90;i++)go(i%2?'lines':'home');
 assert.ok(vm.runInContext('navTrail.length',ctx)<=60);
 const android=fs.readFileSync('app/src/main/java/ar/com/colectivos/consulta/MainActivity.kt','utf8');
