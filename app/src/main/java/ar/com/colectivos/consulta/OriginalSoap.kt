@@ -181,14 +181,33 @@ class OriginalSoap(private val settings: DirectSettings) {
     }
     private fun rows(root: Any, names: Array<String>, depth: Int = 0): JSONArray {
         if (root is JSONArray) return root
-        if (root !is JSONObject || depth > 3) return JSONArray()
+        if (root is String) return if (depth < 6) rows(decode(root), names, depth + 1) else JSONArray()
+        if (root !is JSONObject || depth > 5) return JSONArray()
         val group = value(root, *names)
         if (group is JSONArray) return group
-        if (group is JSONObject) return JSONArray().put(group)
-        if (group is String) return rows(decode(group), names, depth + 1)
-        if (root.length() == 1) {
-            val child = root.opt(root.keys().next())
-            if (child is JSONObject || child is JSONArray || child is String) return rows(child, names, depth + 1)
+        if (group is String) {
+            val nested = rows(decode(group), names, depth + 1)
+            if (nested.length() > 0) return nested
+        }
+        if (group is JSONObject) {
+            val nested = rows(group, names, depth + 1)
+            if (nested.length() > 0) return nested
+            return JSONArray().put(group)
+        }
+        // El proveedor puede mezclar PrincipalJson, MensajeEstado y otros metadatos.
+        // La condición antigua root.length()==1 hacía perder arribos de esas respuestas.
+        for (key in arrayOf("PrincipalJson", "Principal", "Datos", "Resultado", "Data", "Items", "Detalle")) {
+            val nestedValue = value(root, key) ?: continue
+            val nested = rows(nestedValue, names, depth + 1)
+            if (nested.length() > 0) return nested
+        }
+        val keys = root.keys()
+        while (keys.hasNext()) {
+            val child = root.opt(keys.next())
+            if (child is JSONObject || child is JSONArray) {
+                val nested = rows(child, names, depth + 1)
+                if (nested.length() > 0) return nested
+            }
         }
         return JSONArray()
     }
@@ -197,8 +216,8 @@ class OriginalSoap(private val settings: DirectSettings) {
             "lines" -> arrayOf("Lineas","Linea")
             "streets" -> arrayOf("Calles","Calle")
             "crossings" -> arrayOf("Calles","Intersecciones","Interseccion")
-            "stops","nearby" -> arrayOf("Parada","Paradas")
-            "arrivals" -> arrayOf("Arribos","Arribo")
+            "stops","nearby" -> arrayOf("Parada","Paradas","ListadoParadas")
+            "arrivals" -> arrayOf("Arribos","Arribo","ProximosArribos","ProximoArribo")
             "route" -> arrayOf("Puntos","Recorrido")
             else -> arrayOf("items")
         }
@@ -218,19 +237,26 @@ class OriginalSoap(private val settings: DirectSettings) {
                     normalized.put("nombre",str(obj,"Descripcion","nombre"))
                 }
                 "stops","nearby" -> {
-                    normalized.put("id",str(obj,"Codigo","Identificador"))
-                    normalized.put("identificador",str(obj,"Identificador","Codigo"))
-                    normalized.put("nombre",str(obj,"Descripcion","CallePrincipal","Identificador"))
-                    val first = str(obj,"CallePrincipal")
-                    val second = str(obj,"CalleInterseccion")
+                    normalized.put("id",str(obj,"Codigo","CodigoParada","Identificador"))
+                    normalized.put("identificador",str(obj,"Identificador","IdentificadorParada","Codigo"))
+                    normalized.put("nombre",str(obj,"Descripcion","DescripcionParada","CallePrincipal"))
+                    val first = str(obj,"CallePrincipal","NombreCalle")
+                    val second = str(obj,"CalleInterseccion","InterseccionCalle")
                     normalized.put("detalle", listOf(first,second).filter { it.isNotBlank() }.joinToString(" y "))
+                    // La APK 1.7 conserva estos campos de la bandera de cada parada.
+                    val sentido = str(obj,"LineaBanderaYbanAmpliada",
+                        "LineaBanderaYbanampliada","AbreviaturaAmpliadaBandera",
+                        "DescripcionBandera","Sentido","Destino",
+                        "AbreviaturaBandera","Bandera")
+                    normalized.put("sentido",sentido)
+                    normalized.put("bandera",str(obj,"AbreviaturaBandera","DescripcionBandera","Bandera"))
                     normalized.put("lat",number(obj,"Latitud"))
                     normalized.put("lon",number(obj,"Longitud"))
                 }
                 "arrivals" -> {
                     normalized.put("linea",str(obj,"DescripcionLinea","Linea"))
-                    normalized.put("destino",str(obj,"DescripcionBandera","Destino","Bandera"))
-                    normalized.put("arribo",str(obj,"Arribo","Tiempo"))
+                    normalized.put("destino",str(obj,"DescripcionBandera","Destino","Bandera","AbrevBandera"))
+                    normalized.put("arribo",str(obj,"Arribo","Tiempo","ProximoArribo"))
                     normalized.put("lat",number(obj,"Latitud"))
                     normalized.put("lon",number(obj,"Longitud"))
                     normalized.put("latParada",number(obj,"LatParada"))
