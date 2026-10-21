@@ -58,7 +58,13 @@ class OriginalSoap(private val settings: DirectSettings) {
                 params["identificadorParada"] = required(q, "parada")
                 params["codigoLineaParada"] = required(q, "linea")
                 params["codigoAplicacion"] = "24"
-                params["localidad"] = "QUILMES"
+                // La localidad cambia según la parada: Berazategui, Quilmes, etc.
+                // El cliente viejo recibe la localidad como argumento de esta operación.
+                val town = q.optString("localidad").trim().uppercase(java.util.Locale.ROOT)
+                if (town.isEmpty() || town.length > 60 ||
+                    !town.matches(Regex("[\\p{L} .-]+")))
+                    throw IllegalArgumentException("No se pudo determinar la localidad de la parada")
+                params["localidad"] = town
             }
             "route" -> {
                 operation = "RecuperarRecorridoParaMapaAbrevYAmpliPorEntidadYLinea"
@@ -250,6 +256,7 @@ class OriginalSoap(private val settings: DirectSettings) {
                         "AbreviaturaBandera","Bandera")
                     normalized.put("sentido",sentido)
                     normalized.put("bandera",str(obj,"AbreviaturaBandera","DescripcionBandera","Bandera"))
+                    normalized.put("localidad",str(obj,"Localidad","DescripcionLocalidad","NombreLocalidad"))
                     normalized.put("lat",number(obj,"Latitud"))
                     normalized.put("lon",number(obj,"Longitud"))
                 }
