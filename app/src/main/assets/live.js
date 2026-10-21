@@ -376,7 +376,7 @@ function nearbyV3(){
   }).join('');
  }else if(!dataV3.nearLoading&&!dataV3.nearError&&dataV3.nearDiagnostic){
   out+=notice('No se encontraron paradas en la respuesta. Esto no significa que no existan paradas en tu barrio: depende de la cobertura del servidor original.');
-  out+='<button class="secondary" onclick="go(\\'lines\\')">Buscar paradas por línea</button>';
+  out+='<button class="secondary" onclick="go(&quot;lines&quot;)">Buscar paradas por línea</button>';
  }
  if(dataV3.nearLocation&&!dataV3.nearLoading)out+=nearbyStateCard();
  if(dataV3.nearError&&!dataV3.nearLocation)
