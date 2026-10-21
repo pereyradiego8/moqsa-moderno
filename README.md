@@ -69,3 +69,11 @@ También se retiró el control de referencia `línea 77 / MO-01080`, que corresp
 - **Pruebas:** `scripts/check-ux.mjs` valida tiempos, localidades, coordenadas y ubicación bajo demanda; compilación y arranque en Android verificados. El funcionamiento de GPS, la identificación de paradas y la representación real de recorridos requieren pruebas en un teléfono.
 
 **Conservar la última APK funcional como respaldo** hasta confirmar los resultados de Cerca y mapas en el dispositivo real.
+
+## Cerca experimental — corrección del error -9 (21/10/2026)
+
+Una prueba en CABA mostró precisión GPS de 12 metros y respuesta SOAP `System.FormatException` con `CodigoEstado=-9`. **No era una búsqueda normal sin paradas** ni un problema del GPS.
+
+El contrato WSDL público confirma que la operación `RecuperarParadasMasCercanasPorLocalidadProvinciaPais` recibe `isInteligente` (booleano), además de `listaCodigosEmpresa`. La APK anterior omitía el booleano y enviaba `191,7` como un único campo de lista. Ahora se envía `isInteligente=false`, respetando el orden WSDL, y se consultan por separado los dos códigos ya configurados (`191` y `7`) solo cuando el usuario toca Buscar. Las respuestas se reúnen sin duplicados. Los resultados incompletos quedan marcados como tales; si ambas consultas fallan, se muestra un error, jamás «no hay paradas».
+
+La APK original **no tenía la función Cerca**; se trata de una función nueva, experimental, cuyo alcance y cobertura no están garantizados por el proveedor. Mantener las consultas normales de líneas, paradas y arribos sin modificaciones. No mostrar cobertura de CABA confirmada hasta recibir y verificar registros reales en un teléfono.
