@@ -37,3 +37,13 @@ Se actualizaron las pruebas de regresión en scripts/check-ui.mjs para impedir d
 El APK privado de emergencia, firmado con el certificado de la versión anterior, corrige ese parámetro desde el JavaScript sin alterar clases Android.
 
 **Pendiente:** validación de llegadas reales en un teléfono. No afirmar que las predicciones funcionan hasta completar esa prueba.
+
+## Corrección de identificadores (21/10/2026)
+
+El APK original define `ParadaJson.Codigo` (entero de registro) y `ParadaJson.Identificador` (texto utilizado para próximos arribos) como propiedades distintas. La reconstrucción los confundía: si faltaba `Identificador`, usaba `Codigo` como reemplazo y podía enviar valores como `14785` en lugar de un identificador de parada tipo `MO-xxxxx`.
+
+Se eliminó ese fallback en Kotlin y en la interfaz. Si la consulta de paradas no trae el identificador verdadero, el cliente lo indica y **no envía el código interno** a `RecuperarProximosArribos`. Las paradas deben seleccionarse nuevamente; favoritos creados con códigos incorrectos se detectan y requieren volver a seleccionar.
+
+También se retiró el control de referencia `línea 77 / MO-01080`, que correspondía a otra línea distinta de la 300 (código interno 84) de la captura y no servía para comparar la misma consulta. El diagnóstico muestra solo línea, código de registro e identificador de la parada seleccionados, sin secretos.
+
+**Pendiente:** todavía no se ha demostrado que todas las paradas devuelvan predicciones. Verificar los campos y los arribos reales con el APK nuevo antes de declarar el problema resuelto.
