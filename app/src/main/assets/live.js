@@ -102,16 +102,43 @@ function openNearMap(){
  const stops=geoPoints(dataV3.nearby,x=>stopHeading(x),'stop');
  openMap('stops','Paradas cercanas',[...(me?[me]:[]),...stops]);
 }
-function routeLabelFromService(name,index=0){
- const text=String(name||'').trim();
- if(!text)return 'Recorrido disponible';
- const chunks=text.split(';').map(value=>value.trim()).filter(Boolean);
- return chunks.length>1?chunks.slice(1).join(' · '):chunks[0];
+function routeMeters(a,b){
+ const lat1=Number(a.lat),lon1=Number(a.lon),lat2=Number(b.lat),lon2=Number(b.lon);
+ const toRadians=Math.PI/180;
+ const deltaLatitude=(lat2-lat1)*toRadians,deltaLongitude=(lon2-lon1)*toRadians;
+ const value=Math.sin(deltaLatitude/2)**2+
+  Math.cos(lat1*toRadians)*Math.cos(lat2*toRadians)*Math.sin(deltaLongitude/2)**2;
+ return 12742000*Math.asin(Math.min(1,Math.sqrt(value)));
+}
+function routeDistance(points){
+ let total=0;
+ for(let i=1;i<points.length;i++){
+  const meters=routeMeters(points[i-1],points[i]);
+  if(meters<5000)total+=meters;
+ }
+ return total;
+}
+function routeIsReturn(ida,vuelta){
+ const a=ida.points,b=vuelta.points;
+ if(a.length<2||b.length<2)return false;
+ const startA=a[0],endA=a[a.length-1],startB=b[0],endB=b[b.length-1];
+ const latScale=111195,lonScale=111195*Math.cos((Number(startA.lat)+Number(endA.lat))/2*Math.PI/180);
+ const ax=(endA.lon-startA.lon)*lonScale,ay=(endA.lat-startA.lat)*latScale;
+ const bx=(endB.lon-startB.lon)*lonScale,by=(endB.lat-startB.lat)*latScale;
+ const lengthA=Math.hypot(ax,ay),lengthB=Math.hypot(bx,by);
+ if(lengthA<200||lengthB<200)return false; // No adivinar sentidos a partir de lazos cerrados.
+ const opposite=(ax*bx+ay*by)/(lengthA*lengthB);
+ if(opposite>-.55)return false;
+ const reverse=routeMeters(startA,endB)+routeMeters(endA,startB);
+ const same=routeMeters(startA,startB)+routeMeters(endA,endB);
+ return reverse<same*.75 && reverse<Math.max(lengthA,lengthB)*1.35;
 }
 function routeVariants(){
  const all=(Array.isArray(dataV3.route)?dataV3.route:[])
-   .filter(row=>validGeoPoint(row,row?.nombre||'', 'route'));
+  .filter(row=>validGeoPoint(row,row?.nombre||'', 'route'));
  if(!all.length)return [];
+ // Cada descripción del proveedor puede ser un ramal, pero también puede
+ // ser un nombre de punto intermedio. Solo tratamos grupos largos como trazados.
  const groups=new Map();
  for(const row of all){
   const key=String(row.nombre||'').trim();
@@ -119,19 +146,20 @@ function routeVariants(){
   groups.get(key).push(row);
  }
  const entries=[...groups.entries()];
- // El SOAP suele separar los ramales en Descripcion; no unir ida y vuelta.
- const hasBranches=entries.length>1 && entries.length<=80 &&
+ const realBranches=entries.length>1 && entries.length<=80 &&
   entries.every(([name])=>Boolean(name)) &&
-  entries.filter(([,points])=>points.length>=2).length>=Math.ceil(entries.length*0.7);
- if(hasBranches){
-  return entries.map(([name,points],i)=>({
-   label:routeLabelFromService(name,i),
-   points
-  }));
- }
- // Para una sola variante, mostrar igualmente una opción seleccionable.
- // Si cada vértice tiene un nombre distinto no se inventan ramales.
- return [{label:entries.length===1?routeLabelFromService(entries[0][0]):'Recorrido disponible',points:all}];
+  entries.filter(([,pts])=>pts.length>=2).length>=Math.ceil(entries.length*.7);
+ if(!realBranches)return [{label:'Ida',points:all}];
+ const candidates=entries.map(([name,points])=>({name,points,length:routeDistance(points)}))
+  .filter(v=>v.points.length>=2 && v.length>=100)
+  .sort((a,b)=>b.length-a.length);
+ if(!candidates.length)return [{label:'Ida',points:all}];
+ const ida=candidates[0];
+ const vuelta=candidates.filter(c=>c!==ida && c.length>=ida.length*.45 && routeIsReturn(ida,c))
+  .sort((a,b)=>b.length-a.length)[0];
+ const output=[{label:'Ida',points:ida.points}];
+ if(vuelta)output.push({label:'Vuelta',points:vuelta.points});
+ return output;
 }
 function chooseRouteVariant(index){
  const variants=routeVariants();
@@ -481,14 +509,14 @@ function routesV3(){
   if(dataV3.routeLoading)out+='<p class="route-loading">Consultando el recorrido…</p>';
   else if(dataV3.routeError)out+='<p class="route-error">'+clean(dataV3.routeError)+'</p>';
   else if(variants.length){
-   out+='<p>'+(variants.length>1?'Elegí el ramal o sentido para ver su trazado.':
-    'Este es el recorrido disponible para la línea.')+'</p>'+
+   out+='<p>'+(variants.length>1?'Elegí Ida o Vuelta para ver el trayecto completo.':
+    'El servicio solo permite identificar un sentido completo para esta línea.')+'</p>'+
     '<div class="route-variants" role="group" aria-label="Ramal o sentido del recorrido">';
    out+=variants.map((r,i)=>'<button class="chip '+(dataV3.routeVariant===i?'selected':'')+
     '" onclick="chooseRouteVariant('+i+')" aria-pressed="'+(dataV3.routeVariant===i?'true':'false')+'">'+
     clean(r.label)+'</button>').join('')+'</div>';
    const current=variants[dataV3.routeVariant]||variants[0];
-   out+='<p>'+current.points.length+' puntos geográficos disponibles.</p>'+
+   out+='<p>Trayecto completo de origen a destino.</p>'+
     '<button class="primary map-action" onclick="openRouteMap()" '+
     (dataV3.routeMapLoading?'disabled':'')+'>'+I('pin')+
     (dataV3.routeMapLoading?' Abriendo mapa…':' Abrir mapa interactivo')+'</button>';
