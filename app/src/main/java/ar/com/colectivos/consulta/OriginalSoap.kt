@@ -360,7 +360,7 @@ class OriginalSoap(private val settings: DirectSettings) {
                     normalized.put("codigoInterno",codigoInterno)
                     normalized.put("identificador",identificadorOriginal)
                     normalized.put("identificadorPresente",identificadorOriginal.isNotBlank())
-                    normalized.put("nombre",str(obj,"Descripcion","DescripcionParada","CallePrincipal"))
+                    normalized.put("nombre",str(obj,"Descripcion","DescripcionParada","NombreParada","CallePrincipal"))
                     val first = str(obj,"CallePrincipal","NombreCalle")
                     val second = str(obj,"CalleInterseccion","InterseccionCalle")
                     normalized.put("detalle", listOf(first,second).filter { it.isNotBlank() }.joinToString(" y "))
@@ -370,7 +370,7 @@ class OriginalSoap(private val settings: DirectSettings) {
                         "SegundaInterseccion","CalleEntre2","CalleSecundaria2"))
                     normalized.put("altura",str(obj,"Altura","Numero","Numeracion"))
                     normalized.put("direccion",str(obj,"Direccion","DireccionCompleta",
-                        "Ubicacion","CalleYAltura"))
+                        "Ubicacion","CalleYAltura","DireccionParada","Domicilio"))
                     // La APK 1.7 conserva estos campos de la bandera de cada parada.
                     val sentido = str(obj,"LineaBanderaYbanAmpliada",
                         "LineaBanderaYbanampliada","AbreviaturaAmpliadaBandera",
@@ -401,8 +401,13 @@ class OriginalSoap(private val settings: DirectSettings) {
                     normalized.put("lon",number(obj,"Longitud"))
                 }
             }
-            if (kind == "arrivals" || kind == "nearbyArrivals" ||
-                normalized.optString("id").isNotBlank() || normalized.optString("nombre").isNotBlank()) out.put(normalized)
+            if (kind == "arrivals" ||
+                (kind == "nearbyArrivals" &&
+                    (normalized.optString("linea").isNotBlank() ||
+                     normalized.optString("arribo").isNotBlank())) ||
+                normalized.optString("id").isNotBlank() ||
+                normalized.optString("identificador").isNotBlank() ||
+                normalized.optString("nombre").isNotBlank()) out.put(normalized)
         }
         return out
     }
