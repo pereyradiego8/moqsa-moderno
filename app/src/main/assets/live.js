@@ -159,9 +159,10 @@ function routeVariants(){
   entries.every(([name])=>Boolean(name)) &&
   entries.filter(([,pts])=>pts.length>=2).length>=Math.ceil(entries.length*.7);
  if(!realBranches)return [{label:'Recorrido completo',points:all}];
- const candidates=entries.map(([name,points])=>({name,points,length:routeDistance(points)}))
+ const candidates=entries.map(([name,points],index)=>({name,points,length:routeDistance(points),index}))
   .filter(v=>v.points.length>=2 && v.length>=100)
-  .sort((a,b)=>b.length-a.length);
+  .sort((a,b)=>Math.abs(b.length-a.length)<Math.max(a.length,b.length)*.03?
+    a.index-b.index:b.length-a.length);
  if(!candidates.length)return [{label:'Recorrido completo',points:all}];
  const ida=candidates[0];
  const vuelta=candidates.filter(c=>c!==ida && c.length>=ida.length*.45 && routeIsReturn(ida,c))
