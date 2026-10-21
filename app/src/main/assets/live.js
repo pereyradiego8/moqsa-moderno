@@ -1,6 +1,6 @@
 'use strict';
 /* Nueva experiencia V3: datos de servicio, jamás líneas ni arribos simulados. */
-const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],otherArrivals:[],otherLoading:false,otherNotice:'',otherPartial:false,otherRequestId:0,route:[],line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearAccuracy:null,nearDiagnostic:null,nearError:'',nearLoading:false,nearStop:null,nearStopArrivals:[],nearStopMessage:'',nearStopError:'',nearStopLoading:false,nearStopPartial:false,nearStopRequestId:0,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
+const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],otherArrivals:[],otherLoading:false,otherNotice:'',otherPartial:false,otherRequestId:0,route:[],routeLine:null,routeQuery:'',routeLoading:false,routeError:'',routeRequestId:0,line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearAccuracy:null,nearDiagnostic:null,nearError:'',nearLoading:false,nearStop:null,nearStopArrivals:[],nearStopMessage:'',nearStopError:'',nearStopLoading:false,nearStopPartial:false,nearStopRequestId:0,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
 const calls=new Map();let callNo=0;
 function native(action,params={}){
  return new Promise((resolve,reject)=>{
@@ -104,12 +104,26 @@ function openNearMap(){
 }
 function openRouteMap(){
  const points=geoPoints(dataV3.route,(v,i)=>v.nombre||'Punto '+String(i+1));
- openMap('route','Recorrido · '+String(dataV3.line?.nombre||''),points);
+ if(!dataV3.routeLine)return;
+ openMap('route','Recorrido · '+String(dataV3.routeLine.nombre||dataV3.routeLine.id),points);
 }
 async function loadRoute(){
- if(!dataV3.line)return;
- dataV3.route=[];
- await request('route',{linea:dataV3.line.id},'route');
+ const selected=dataV3.routeLine;
+ if(!selected)return;
+ const requestId=++dataV3.routeRequestId;
+ dataV3.route=[];dataV3.routeLoading=true;dataV3.routeError='';
+ render();
+ try{
+  const response=await native('route',{linea:selected.id});
+  if(requestId!==dataV3.routeRequestId||dataV3.routeLine?.id!==selected.id)return;
+  if(!response||!Array.isArray(response.items))throw Error('Recorrido no disponible');
+  dataV3.route=response.items;
+ }catch(e){
+  if(requestId!==dataV3.routeRequestId||dataV3.routeLine?.id!==selected.id)return;
+  dataV3.routeError=e.message||'No se pudo consultar el recorrido';
+ }
+ dataV3.routeLoading=false;
+ render();
 }
 function mainV3(){
  return '<div class="greeting"><div class="eyebrow">TU VIAJE, MÁS SIMPLE</div><h2>¿A dónde<br>vamos hoy?</h2><p>Encontrá el colectivo y su parada sin perder tiempo.</p></div>'+
@@ -185,7 +199,7 @@ function stopsV3(){
  '<select id="crossing" onchange="chooseCrossing(this.value)" '+(dataV3.street===null?'disabled':'')+'><option value="">Elegí una intersección</option>'+
  optionsV3(dataV3.crossings,dataV3.crossing)+'</select></div></div>';
  if(geoPoints(dataV3.stops).length)out+='<button class="secondary map-action" onclick="openStopsMap()">'+I('pin')+' Ver paradas en mapa</button>';
- out+='<button class="secondary map-action" onclick="go(\'routes\')">'+I('arrow')+' Ver recorrido de la línea</button>';
+ out+='<button class="secondary map-action" onclick="go(\'routes\')">'+I('arrow')+' Explorar recorridos</button>';
  out+=dataV3.stops.map((r,i)=>item(stopHeading(r),stopSubtitle(r),'chooseStop('+i+')','pin')).join('');
  return out+feedback()+(dataV3.crossing!==null&&!dataV3.stops.length&&!dataV3.loading&&!dataV3.error?empty('paradas'):'');
 }
@@ -318,20 +332,57 @@ function favsV3(){
  (favs.length?favs.map((f,i)=>item(f.line.nombre||f.line.id,stopHeading(f.stop),'openFavorite('+i+')','star')).join(''):empty('favoritos'));
 }
 function openFavorite(i){const f=favoritesV3()[i];if(!f)return;dataV3.line=f.line;dataV3.stop=f.stop;dataV3.otherRequestId++;dataV3.otherArrivals=[];dataV3.diagnostico=null;dataV3.arrivals=[];dataV3.error='';go('arrival');loadArrivals();}
-function routesV3(){
- if(!dataV3.line)return intro('Recorridos','Elegí una línea para ver su trayecto sobre el mapa.','RECORRIDOS')+
- '<button class="primary" onclick="go(\'lines\')">Elegir línea</button>'+
- notice('Elegí una línea para ver su recorrido.');
- const coords=geoPoints(dataV3.route,(v,i)=>v.nombre||'Punto '+String(i+1));
- let out=back('stops')+intro('Recorrido · '+clean(dataV3.line.nombre||dataV3.line.id),'Trayecto de la línea sobre OpenStreetMap.','MAPA DEL RECORRIDO')+
- '<button class="primary" onclick="loadRoute()">'+I('refresh')+' Consultar recorrido real</button>';
- if(coords.length){
-   out+='<div class="card"><h3>Recorrido disponible</h3><p>Podés explorarlo en el mapa.</p></div>'+
-   '<button class="secondary map-action" onclick="openRouteMap()">'+I('pin')+' Abrir recorrido en mapa interactivo</button>';
- }else if(!dataV3.loading&&!dataV3.error){
-   out+=notice('Tocá Consultar recorrido para ver el trayecto en el mapa.');
+function routeLineChoices(){
+ const query=dataV3.routeQuery.trim().toLocaleLowerCase('es-AR');
+ const matches=orderedRows(dataV3.lines).filter(({r})=>
+  String(r.nombre||r.id||'').toLocaleLowerCase('es-AR').includes(query));
+ if(!matches.length){
+  if(dataV3.loading&&!dataV3.lines.length)return notice('Buscando líneas disponibles…');
+  return empty(query?'líneas que coincidan con tu búsqueda':'líneas disponibles');
  }
- return out+feedback()+(dataV3.route.length&&!coords.length?notice('No hay un mapa disponible para este recorrido.'):'');
+ return matches.map(({r,i})=>
+  item(r.nombre||r.id,'Ver recorrido en el mapa','chooseRouteLine('+i+')','route')).join('');
+}
+function filterRouteLines(){
+ const input=document.getElementById('routeSearch');
+ const output=document.getElementById('routeLineResults');
+ if(!input||!output)return;
+ dataV3.routeQuery=input.value||'';
+ output.innerHTML=routeLineChoices();
+}
+function chooseRouteLine(i){
+ const selected=dataV3.lines[Number(i)];
+ if(!selected)return;
+ dataV3.routeRequestId++;
+ dataV3.routeLine=selected;
+ dataV3.route=[];dataV3.routeQuery='';
+ dataV3.routeLoading=false;dataV3.routeError='';
+ render();
+ void loadRoute();
+}
+function routesV3(){
+ let out=back('home')+
+  intro('Recorridos','Elegí una línea para consultar su trayecto en el mapa.','RECORRIDOS');
+ if(dataV3.routeLine){
+  const coords=geoPoints(dataV3.route,(v,i)=>v.nombre||'Punto '+String(i+1));
+  out+='<div class="card"><div class="cardhead"><h3>Recorrido · '+
+   clean(dataV3.routeLine.nombre||dataV3.routeLine.id)+'</h3></div>';
+  if(dataV3.routeLoading)out+='<p>Buscando el recorrido…</p>';
+  else if(dataV3.routeError)out+='<p>No pudimos consultar el recorrido. Volvé a intentarlo.</p>';
+  else if(coords.length)out+='<p>Podés explorar el trayecto en el mapa.</p>'+
+   '<button class="secondary map-action" onclick="openRouteMap()">'+I('pin')+' Abrir mapa interactivo</button>';
+  else out+='<p>No hay un recorrido con coordenadas disponible por ahora.</p>';
+  out+='<button class="secondary" onclick="loadRoute()" '+
+   (dataV3.routeLoading?'disabled':'')+'>'+I('refresh')+' Actualizar recorrido</button></div>';
+ }
+ out+='<div class="headrow"><h3>'+(dataV3.routeLine?'Elegir otra línea':'Todas las líneas')+'</h3></div>'+
+  '<div class="search-bar line-search">'+I('search')+
+  '<input id="routeSearch" aria-label="Buscar línea para ver recorrido" placeholder="Buscar número o nombre" value="'+
+  clean(dataV3.routeQuery)+'" oninput="filterRouteLines()"/></div>'+
+  '<div id="routeLineResults">'+routeLineChoices()+'</div>'+
+  '<button class="secondary" onclick="loadLines()">'+I('refresh')+' Actualizar líneas</button>';
+ if(!dataV3.lines.length&&!dataV3.loading)out+=feedback();
+ return out;
 }
 function metersBetween(a,b){
  if(!a||!b)return null;
@@ -580,10 +631,15 @@ const MAX_NAV_TRAIL=60;
 go=function(key){
  const destination=PAGES[key]?key:'home';
  if(destination===screen)return;
+ if(destination==='routes'){
+  dataV3.routeRequestId++;
+  dataV3.routeLine=null;dataV3.routeQuery='';dataV3.route=[];
+  dataV3.routeLoading=false;dataV3.routeError='';
+ }
  navTrail.push(screen);
  if(navTrail.length>MAX_NAV_TRAIL)navTrail.shift();
  oldGo(destination);
- if(destination==='lines'&&!dataV3.lines.length)loadLines();
+ if((destination==='lines'||destination==='routes')&&!dataV3.lines.length)loadLines();
 };
 
 // Función compartida por Atrás Android y las flechas visibles.

@@ -34,6 +34,8 @@ jobs:
         run: node scripts/check-other-lines.mjs
       - name: Validar historial de navegación
         run: node scripts/check-navigation.mjs
+      - name: Validar catálogo y selección de recorridos
+        run: node scripts/check-routes.mjs
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
