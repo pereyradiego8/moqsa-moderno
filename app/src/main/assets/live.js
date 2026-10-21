@@ -1,6 +1,6 @@
 'use strict';
 /* Nueva experiencia V3: datos de servicio, jamás líneas ni arribos simulados. */
-const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],route:[],line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearAccuracy:null,nearDiagnostic:null,nearError:'',nearLoading:false,nearStop:null,nearStopArrivals:[],nearStopMessage:'',nearStopError:'',nearStopLoading:false,nearStopPartial:false,nearStopRequestId:0,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
+const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],otherArrivals:[],otherLoading:false,otherNotice:'',otherPartial:false,otherRequestId:0,route:[],line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearAccuracy:null,nearDiagnostic:null,nearError:'',nearLoading:false,nearStop:null,nearStopArrivals:[],nearStopMessage:'',nearStopError:'',nearStopLoading:false,nearStopPartial:false,nearStopRequestId:0,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
 const calls=new Map();let callNo=0;
 function native(action,params={}){
  return new Promise((resolve,reject)=>{
@@ -20,10 +20,10 @@ function item(row,detail,onclick,icon='bus'){
  return '<button class="row" onclick="'+onclick+'"><div class="glyph">'+I(icon)+'</div><div class="meta"><strong>'+clean(row)+'</strong><span>'+clean(detail)+'</span></div>'+I('chevron')+'</button>';
 }
 function feedback(){
- return (dataV3.loading?'<div class="card empty"><h3>Consultando servicio…</h3><p>Esperá un momento.</p></div>':'')+
- (dataV3.error?'<div class="card empty"><h3>No se pudo consultar el servidor original</h3><p>'+clean(dataV3.error)+'</p><button class="secondary" onclick="retryScreen()">Reintentar consulta</button></div>':'');
+ return (dataV3.loading?'<div class="card empty"><h3>Buscando información…</h3><p>Esperá un momento.</p></div>':'')+
+ (dataV3.error?'<div class="card empty"><h3>No pudimos completar la consulta</h3><p>Probá nuevamente.</p><button class="secondary" onclick="retryScreen()">Reintentar</button></div>':'');
 }
-const empty=label=>'<div class="card empty"><h3>Sin '+clean(label)+'</h3><p>No hay resultados recibidos del servidor.</p></div>';
+const empty=label=>'<div class="card empty"><h3>Sin '+clean(label)+'</h3><p>No encontramos información por el momento.</p></div>';
 async function request(action,params,field){
  dataV3.loading=true;dataV3.error='';render();
  try{
@@ -120,7 +120,7 @@ function mainV3(){
  quickCard('Favoritos','Tus paradas guardadas','star','purple','fav')+
  quickCard('Recorridos','Explorá los trayectos','pin','orange','routes')+
  quickCard('Cómo consultar','Buscá tu línea y parada','info','blue','help')+'</div>'+
- notice('Cliente independiente y no oficial. No mostramos horarios de ejemplo como si fueran reales.');
+ '';
 }
 function linesV3(){
  return intro('Elegí tu línea','Buscá un colectivo para encontrar su parada.','LÍNEAS DEL SERVICIO')+
@@ -201,39 +201,62 @@ function chooseCrossing(i){
 }
 function chooseStop(i){
  const stop=dataV3.stops[i];if(!stop)return;
- dataV3.stop=stop;dataV3.arrivals=[];dataV3.diagnostico=null;dataV3.arrivalsChecked=false;dataV3.mensaje='';go('arrival');loadArrivals();
+ dataV3.stop=stop;dataV3.arrivals=[];dataV3.otherRequestId++;dataV3.otherArrivals=[];dataV3.otherLoading=false;dataV3.diagnostico=null;dataV3.arrivalsChecked=false;dataV3.mensaje='';go('arrival');loadArrivals();
+}
+function lineNumber(label){
+ const text=String(label||'').trim().toLocaleUpperCase('es-AR');
+ const match=text.match(/(?:^|L[ÍI]NEA\s*)(\d{1,4})(?=\D|$)/);
+ return match?match[1]:'';
+}
+function otherLinesAtStop(rows,selectedLine,selectedArrivals=[]){
+ const current=lineNumber(selectedLine);
+ const primaryNumbers=new Set((Array.isArray(selectedArrivals)?selectedArrivals:[])
+  .map(row=>lineNumber(row.linea)).filter(Boolean));
+ if(current)primaryNumbers.add(current);
+ const distinct=[];
+ for(const a of (Array.isArray(rows)?rows:[])){
+  const number=lineNumber(a.linea);
+  if(!number||primaryNumbers.has(number))continue;
+  distinct.push(a);
+ }
+ return nearStopArrivalsSorted(distinct);
+}
+async function loadOtherArrivals(identifier){
+ const requestId=++dataV3.otherRequestId;
+ dataV3.otherLoading=true;dataV3.otherNotice='';dataV3.otherPartial=false;dataV3.otherArrivals=[];
+ render();
+ try{
+  const response=await native('nearbyArrivals',{parada:identifier});
+  if(requestId!==dataV3.otherRequestId)return;
+  if(!Array.isArray(response.items))throw Error('La consulta no devolvió arribos');
+  dataV3.otherArrivals=otherLinesAtStop(response.items,
+    dataV3.line?.nombre||dataV3.line?.id,dataV3.arrivals);
+  dataV3.otherPartial=Boolean(response.parcial);
+ }catch(e){
+  if(requestId!==dataV3.otherRequestId)return;
+  dataV3.otherNotice='No hay información disponible de otras líneas por ahora.';
+ }
+ if(requestId===dataV3.otherRequestId){
+  dataV3.otherLoading=false;render();
+ }
 }
 async function loadArrivals(){
  if(!dataV3.line||!dataV3.stop)return;
+ const thisRequest=++dataV3.otherRequestId;
  dataV3.arrivalsChecked=false;dataV3.mensaje='';dataV3.arrivals=[];
+ dataV3.otherArrivals=[];dataV3.otherLoading=false;
+ dataV3.otherNotice='';dataV3.otherPartial=false;
  const identifier=stopIdentifier(dataV3.stop);
  if(!identifier){
-  dataV3.error='La parada no incluye el campo Identificador del servicio original. No se puede consultar con el código interno; volvé a seleccionar la parada.';
-  render();
-  return;
+  dataV3.error='No pudimos identificar esta parada. Volvé a seleccionarla.';
+  render();return;
  }
  dataV3.error='';render();
- // Sólo enviamos el identificador real y la línea seleccionada.
  await request('arrivals',{linea:dataV3.line.id,parada:identifier},'arrivals');
+ if(thisRequest!==dataV3.otherRequestId)return;
  dataV3.arrivalsChecked=!dataV3.error;
+ if(!dataV3.error&&screen==='arrival')void loadOtherArrivals(identifier);
 }
-function diagnosticPanel(){
- if(!dataV3.stop||!dataV3.line||!dataV3.error)return '';
- const ident=stopIdentifier(dataV3.stop);
- const codigo=String(dataV3.stop.codigoInterno||dataV3.stop.id||'');
- const line=String(dataV3.line.id||'');
- return '<div class="card"><h3>Diagnóstico de esta parada</h3>'+
- '<p>Línea seleccionada: <strong>'+clean(dataV3.line.nombre||'')+' (interna '+clean(line)+')</strong></p>'+
- '<p>Código de registro: <strong>'+clean(codigo||'No informado')+'</strong></p>'+
- '<p>Identificador de llegadas: <strong>'+clean(ident||'No informado por el servicio')+'</strong></p>'+
- '<p>Ciudad de consulta: <strong>QUILMES</strong></p>'+
- '<p><strong>Qué está pasando:</strong> '+clean(ident?
-   'El servidor rechazó esta combinación de línea e identificador.':
-   'La respuesta de paradas no incluyó un identificador válido; el código de registro no reemplaza ese dato.')+'</p>'+
- '<button class="secondary" onclick="moqsaGoBack()">Volver a la selección de paradas</button>'+
- '<p style="font-size:12px">Se muestran únicamente los códigos de la línea y parada seleccionadas; no se hacen consultas a otras líneas ni se exponen contraseñas.</p></div>';
-}
-// La ETA puede ser "24 min. aprox." o un mensaje no numérico del servicio.
 function etaParts(raw){
  const value=String(raw||'Sin estimación').trim();
  const m=value.match(/^(\d{1,4})\s*min(?:\.|utos?)?\s*(.*)$/i);
@@ -253,6 +276,16 @@ function arrivalCard(a,i){
   '<span class="arrival-destination">'+clean(a.destino||'Destino no informado')+'</span>'+
   '<span class="arrival-position">'+(validGeoPoint(a,'','bus')?'Ubicación disponible en mapa':'Sin posición GPS informada')+'</span></div></div>';
 }
+function otherArrivalCard(a,i){
+ const eta=etaParts(a.arribo);
+ const number=eta.number?
+  '<strong class="other-eta-number">'+clean(eta.number)+'</strong><span>'+clean(eta.suffix)+'</span>':
+  '<strong class="other-eta-description">'+clean(eta.suffix)+'</strong>';
+ return '<div class="other-arrival-item"><div class="other-arrival-details">'+
+ '<strong>Línea '+clean(a.linea||'')+'</strong>'+
+ '<span>'+clean(a.destino||'Destino no informado')+'</span></div>'+
+ '<div class="other-arrival-time">'+number+'</div></div>';
+}
 function arrivalsV3(){
  if(!dataV3.stop||!dataV3.line)return intro('Próximas llegadas','Elegí una parada primero.','ARRIBOS')+'<button class="primary" onclick="go(\'lines\')">Buscar línea</button>';
  let out=back('stops')+intro('Próximas llegadas',clean(dataV3.line.nombre||dataV3.line.id)+' · '+clean(stopHeading(dataV3.stop)),'DATOS REALES')+
@@ -260,10 +293,16 @@ function arrivalsV3(){
  out+=dataV3.arrivals.length
  ? dataV3.arrivals.map(arrivalCard).join('')
  :(!dataV3.loading&&!dataV3.error?'<div class="screen-note"><strong>Sin estimaciones disponibles ahora.</strong><p>'+clean(dataV3.mensaje||'El servidor no envió tiempos para esta parada. Podés intentar de nuevo en unos minutos.')+'</p></div>':'');
+ out+='</div>';
+ out+='<div class="card arrival-panel other-lines-panel"><div class="cardhead"><h3>Otras líneas en esta parada</h3></div>';
+ if(dataV3.otherArrivals.length)out+=dataV3.otherArrivals.map(otherArrivalCard).join('');
+ else if(dataV3.otherLoading)out+='<p>Buscando otras líneas…</p>';
+ else out+='<p>'+clean(dataV3.otherNotice||'Sin otras llegadas informadas por ahora.')+'</p>';
+ if(dataV3.otherPartial&&dataV3.otherArrivals.length)out+='<p class="muted">Puede haber más líneas sin estimación.</p>';
  out+='</div><button class="primary" onclick="loadArrivals()">'+I('refresh')+' Actualizar llegadas</button>';
  if(currentStopPoint()||arrivalVehiclePoints().length)
-    out+='<button class="secondary map-action" onclick="openArrivalsMap()">'+I('pin')+' Ubicar parada y colectivos en mapa</button>';
- return out+feedback()+diagnosticPanel();
+    out+='<button class="secondary map-action" onclick="openArrivalsMap()">'+I('pin')+' Ver parada y colectivos en el mapa</button>';
+ return out+feedback();
 }
 function favoritesV3(){try{const a=JSON.parse(localStorage.getItem('moqsa_v3_favs')||'[]');return Array.isArray(a)?a.filter(x=>x&&x.line&&x.stop).slice(0,100):[];}catch(e){return [];}}
 function toggleFavorite(){
@@ -278,7 +317,7 @@ function favsV3(){
  const favs=favoritesV3();return intro('Tus favoritos','Acceso rápido a tus paradas guardadas.','GUARDADOS')+
  (favs.length?favs.map((f,i)=>item(f.line.nombre||f.line.id,stopHeading(f.stop),'openFavorite('+i+')','star')).join(''):empty('favoritos'));
 }
-function openFavorite(i){const f=favoritesV3()[i];if(!f)return;dataV3.line=f.line;dataV3.stop=f.stop;dataV3.diagnostico=null;dataV3.arrivals=[];dataV3.error='';go('arrival');loadArrivals();}
+function openFavorite(i){const f=favoritesV3()[i];if(!f)return;dataV3.line=f.line;dataV3.stop=f.stop;dataV3.otherRequestId++;dataV3.otherArrivals=[];dataV3.diagnostico=null;dataV3.arrivals=[];dataV3.error='';go('arrival');loadArrivals();}
 function routesV3(){
  if(!dataV3.line)return intro('Recorridos','Elegí una línea para ver su trayecto sobre el mapa.','RECORRIDOS')+
  '<button class="primary" onclick="go(\'lines\')">Elegir línea</button>'+
