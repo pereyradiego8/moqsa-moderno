@@ -1,0 +1,29 @@
+name: Diagnosticar contrato SOAP de recorridos
+on:
+  push:
+    paths: ['.github/workflows/inspect-route-soap.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Inspeccionar operaciones y parámetros (sin credenciales)
+        run: |
+          python3 - <<'PY'
+          import requests,xml.etree.ElementTree as E
+          url='https://clswbsas.smartmovepro.net/ModuloParadas/SWParadas.asmx?WSDL'
+          r=requests.get(url,timeout=20);print('WSDL status',r.status_code,'bytes',len(r.content));r.raise_for_status()
+          root=E.fromstring(r.content)
+          ns={'x':'http://www.w3.org/2001/XMLSchema','w':'http://schemas.xmlsoap.org/wsdl/'}
+          names=['RecuperarRecorridoParaMapaAbrevYAmpliPorEntidadYLinea',
+                 'RecuperarParadasConBanderaYDestinoPorLinea']
+          for name in names:
+            for op in root.findall('.//w:operation',ns):
+              if op.attrib.get('name')==name:print('OPERATION',name)
+            for node in root.findall('.//x:element',ns):
+              if node.attrib.get('name')==name:
+                print('REQUEST',name,[(x.attrib.get('name'),x.attrib.get('type')) for x in node.findall('.//x:element',ns)])
+          PY
