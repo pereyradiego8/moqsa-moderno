@@ -155,7 +155,17 @@ class OriginalSoap(private val settings: DirectSettings) {
                 message.contains("Parada inexistente", ignoreCase = true)) {
                 throw IllegalStateException("El servidor no reconoció esta parada. Se puede reintentar la consulta.")
             }
-            return JSONObject().put("ok", true).put("items", items).put("mensaje", message)
+            val output = JSONObject().put("ok", true).put("items", items).put("mensaje", message)
+            if (action == "nearby") {
+                // No son datos personales: solo la cantidad y el estado que informa el SOAP.
+                // Diferencia lista realmente vacía de filas recibidas pero no interpretadas.
+                val rawCount = rows(payload, arrayOf("Parada", "Paradas", "ListadoParadas")).length()
+                output.put("registrosOriginales", rawCount)
+                output.put("codigoEstado", value(payload, "CodigoEstado", "codigoEstado") ?: JSONObject.NULL)
+                output.put("registrosInterpretados", items.length())
+                output.put("fuente", "SOAP original MOQSA")
+            }
+            return output
         } finally {
             connection.disconnect()
         }
