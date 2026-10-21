@@ -28,6 +28,62 @@ class OriginalSoap(private val settings: DirectSettings) {
     }
 
     fun execute(action: String, q: JSONObject): JSONObject {
+        if (action != "nearby") return executeOnce(action, q, null)
+
+        // El servicio admite una lista de empresas, pero con "191,7" devolvía
+        // FormatException (-9). Probamos los DOS códigos ya configurados, de a uno.
+        // Solo bajo demanda; las consultas de llegadas no se modifican.
+        val combined = JSONArray()
+        val seen = HashSet<String>()
+        var rawCount = 0
+        var healthy = 0
+        val warnings = ArrayList<String>()
+        for (company in listOf("191", "7")) {
+            try {
+                val response = executeOnce(action, q, company)
+                val status = response.optString("codigoEstado")
+                val message = response.optString("mensaje").trim()
+                if (status == "-9" || message.contains("System.FormatException", ignoreCase = true)) {
+                    warnings.add("El proveedor rechazó el formato para una empresa consultada")
+                    continue
+                }
+                if (status.toIntOrNull()?.let { it < 0 } == true) {
+                    warnings.add("El proveedor informó un error para una empresa consultada")
+                    continue
+                }
+                healthy++
+                rawCount += response.optInt("registrosOriginales", 0)
+                val rows = response.optJSONArray("items") ?: JSONArray()
+                for (i in 0 until rows.length()) {
+                    val stop = rows.optJSONObject(i) ?: continue
+                    val key = stop.optString("identificador").ifBlank {
+                        stop.optString("codigoInterno").ifBlank { stop.toString() }
+                    }
+                    if (seen.add(key)) combined.put(stop)
+                }
+            } catch (_: Exception) {
+                warnings.add("No se pudo completar una consulta de cercanía")
+            }
+        }
+        if (healthy == 0) {
+            throw IllegalStateException(
+                "El servicio original rechazó la consulta de paradas cercanas. " +
+                "La función Cerca es experimental y no se puede confirmar cobertura."
+            )
+        }
+        return JSONObject()
+            .put("ok", true)
+            .put("items", combined)
+            .put("registrosOriginales", rawCount)
+            .put("registrosInterpretados", combined.length())
+            .put("codigoEstado", if (warnings.isEmpty()) 0 else 1)
+            .put("mensaje", if (warnings.isEmpty()) "Consulta de cercanía completada."
+                else "Resultado parcial: " + warnings.joinToString("; ") + ".")
+            .put("parcial", warnings.isNotEmpty())
+            .put("fuente", "SOAP original MOQSA")
+    }
+
+    private fun executeOnce(action: String, q: JSONObject, companyCode: String?): JSONObject {
         val (user, pass) = settings.credentials()
         val params = linkedMapOf<String, String>()
         val operation: String
@@ -71,7 +127,10 @@ class OriginalSoap(private val settings: DirectSettings) {
                 operation = "RecuperarParadasMasCercanasPorLocalidadProvinciaPais"
                 params["latitud"] = required(q, "lat")
                 params["longitud"] = required(q, "lon")
-                params["listaCodigosEmpresa"] = "191,7"
+                params["listaCodigosEmpresa"] = companyCode
+                    ?: throw IllegalArgumentException("Código de empresa requerido")
+                // El WSDL público declara isInteligente como booleano.
+                params["isInteligente"] = "false"
                 params["descripcionProvincia"] = "BUENOS AIRES"
                 params["descripcionPais"] = "ARGENTINA"
             }
