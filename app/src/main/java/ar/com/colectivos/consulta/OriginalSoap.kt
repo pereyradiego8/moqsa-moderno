@@ -266,6 +266,8 @@ class OriginalSoap(private val settings: DirectSettings) {
                     normalized.put("sentido",sentido)
                     normalized.put("bandera",str(obj,"AbreviaturaBandera","DescripcionBandera","Bandera"))
                     normalized.put("localidad",str(obj,"Localidad","DescripcionLocalidad","NombreLocalidad"))
+                    normalized.put("lineaId",str(obj,"CodigoLineaParada","CodigoLinea"))
+                    normalized.put("lineaNombre",str(obj,"DescripcionLinea","Linea"))
                     normalized.put("lat",number(obj,"Latitud"))
                     normalized.put("lon",number(obj,"Longitud"))
                 }
