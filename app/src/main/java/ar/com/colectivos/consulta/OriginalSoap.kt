@@ -58,13 +58,10 @@ class OriginalSoap(private val settings: DirectSettings) {
                 params["identificadorParada"] = required(q, "parada")
                 params["codigoLineaParada"] = required(q, "linea")
                 params["codigoAplicacion"] = "24"
-                // La localidad cambia según la parada: Berazategui, Quilmes, etc.
-                // El cliente viejo recibe la localidad como argumento de esta operación.
-                val town = q.optString("localidad").trim().uppercase(java.util.Locale.ROOT)
-                if (town.isEmpty() || town.length > 60 ||
-                    !town.matches(Regex("[\\p{L} .-]+")))
-                    throw IllegalArgumentException("No se pudo determinar la localidad de la parada")
-                params["localidad"] = town
+                // Valor por defecto comprobado en el APK original:
+                // SharedPreferences("datos").getString("ciudad", "QUILMES").
+                // No debe derivarse de la calle elegida (p.ej. CALLE 24 - BERAZATEGUI).
+                params["localidad"] = "QUILMES"
             }
             "route" -> {
                 operation = "RecuperarRecorridoParaMapaAbrevYAmpliPorEntidadYLinea"
@@ -152,8 +149,13 @@ class OriginalSoap(private val settings: DirectSettings) {
             }
             if (raw == null) throw IllegalStateException("El servicio no devolvió el resultado SOAP esperado")
             val payload = decode(raw)
-            return JSONObject().put("ok", true).put("items", normalize(action, payload))
-                .put("mensaje", value(payload, "MensajeEstado", "mensajeEstado", "mensaje")?.toString() ?: "")
+            val items = normalize(action, payload)
+            val message = value(payload, "MensajeEstado", "mensajeEstado", "mensaje")?.toString()?.trim() ?: ""
+            if (action == "arrivals" && items.length() == 0 &&
+                message.contains("Parada inexistente", ignoreCase = true)) {
+                throw IllegalStateException("El servidor no reconoció esta parada. Se puede reintentar la consulta.")
+            }
+            return JSONObject().put("ok", true).put("items", items).put("mensaje", message)
         } finally {
             connection.disconnect()
         }
