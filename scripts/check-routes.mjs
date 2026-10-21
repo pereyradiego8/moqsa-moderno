@@ -31,7 +31,7 @@ const ctx=vm.createContext({
 });
 vm.runInContext(
  section('function validGeoPoint(','function currentStopPoint(')+
- section('function routeVariants(){','function mainV3(){')+
+ section('function routeLabelFromService(','function mainV3(){')+
  section('function routeLineChoices(){','function metersBetween('),ctx);
 const call=expr=>vm.runInContext(expr,ctx);
 assert.match(call('routesV3()'),/Todas las líneas/);
@@ -66,6 +66,19 @@ assert.equal(pending[2].params.points.length,1);
 pending[2].resolve({opened:true});
 await opening;
 assert.equal(dataV3.line.id,'99');
+
+// El selector también aparece con una sola variante real.
+dataV3.route=[{nombre:'ÚNICO;Hacia Bernal',lat:-34.7,lon:-58.2}];
+assert.equal(call('routeVariants().length'),1);
+assert.equal(call('routeVariants()[0].label'),'Hacia Bernal');
+assert.match(call('routesV3()'),/chooseRouteVariant\(0\)/);
+assert.match(call('routesV3()'),/Este es el recorrido disponible/);
+// No inventar ramales cuando el servidor entrega nombres por vértice.
+dataV3.route=Array.from({length:15},(_,i)=>({
+ nombre:'Punto '+(i+1),lat:-34.7+i*.0001,lon:-58.2+i*.0001
+}));
+assert.equal(call('routeVariants().length'),1);
+assert.equal(call('routeVariants()[0].label'),'Recorrido disponible');
 
 // Un recorrido con ramales independientes no debe unir las geometrías.
 dataV3.route=[
