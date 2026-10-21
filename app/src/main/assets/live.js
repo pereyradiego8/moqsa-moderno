@@ -117,7 +117,7 @@ function filterLines(){
 async function loadLines(){await request('lines',{},'lines');}
 function chooseLine(i){
  const selected=dataV3.lines[i];if(!selected)return;
- dataV3.line=selected;dataV3.street=null;dataV3.crossing=null;dataV3.stop=null;dataV3.streets=[];dataV3.crossings=[];dataV3.stops=[];
+ dataV3.line=selected;dataV3.street=null;dataV3.crossing=null;dataV3.stop=null;dataV3.streets=[];dataV3.crossings=[];dataV3.stops=[];dataV3.route=[];
  go('stops');request('streets',{linea:selected.id},'streets');
 }
 function optionsV3(rows,index){return rows.map((r,i)=>'<option value="'+i+'"'+(index===String(i)?' selected':'')+'>'+clean(r.nombre||r.id)+'</option>').join('');}
