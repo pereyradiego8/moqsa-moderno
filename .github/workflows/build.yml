@@ -18,10 +18,10 @@ jobs:
           node-version: '22'
       - name: Validar JavaScript
         run: node --check app/src/main/assets/live.js
-      - name: Validar que se comparen los códigos de la misma línea
+      - name: Verificar consultas independientes
         run: |
-          grep -q 'diagnosticPanel()' app/src/main/assets/live.js
           ! grep -q 'diagnose.arrivals' app/src/main/java/ar/com/colectivos/consulta/MainActivity.kt
+          grep -q 'otherLinesAtStop' app/src/main/assets/live.js
       - name: Validar localidades y sentidos
         run: node scripts/check-ui.mjs
       - name: Verificar mapas y accesibilidad de arribos
