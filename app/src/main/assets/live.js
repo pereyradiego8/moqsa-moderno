@@ -203,5 +203,38 @@ makers.shortcuts=()=>pendingV3('Accesos directos');
 makers.about=()=>intro('MOQSA','Consulta de colectivos.','ACERCA DE')+notice('Cliente no oficial. Consulta directamente el servicio SOAP original por HTTPS, sin servidor intermedio.');
 makers.help=()=>intro('Cómo consultar','Elegí una línea, calle, intersección y parada para ver horarios.','AYUDA');
 const oldGo=go;
-go=function(key){oldGo(key);if(key==='lines'&&!dataV3.lines.length)loadLines();};
+const navTrail=[];
+const MAX_NAV_TRAIL=60;
+
+// Todas las rutas (incluidas las pestañas) dejan constancia de la pantalla anterior.
+go=function(key){
+ const destination=PAGES[key]?key:'home';
+ if(destination===screen)return;
+ navTrail.push(screen);
+ if(navTrail.length>MAX_NAV_TRAIL)navTrail.shift();
+ oldGo(destination);
+ if(destination==='lines'&&!dataV3.lines.length)loadLines();
+};
+
+// Función compartida por Atrás Android y las flechas visibles.
+window.moqsaGoBack=function(){
+ while(navTrail.length){
+  const previous=navTrail.pop();
+  if(!PAGES[previous]||previous===screen)continue;
+  oldGo(previous);
+  if(previous==='lines'&&!dataV3.lines.length)loadLines();
+  return true;
+ }
+ if(screen!=='home'){
+  oldGo('home');
+  return true;
+ }
+ return false;
+};
+
+// Las flechas de pantalla respetan el historial en vez de crear una ruta de regreso nueva.
+back=function(fallback='home'){
+ const previous=[...navTrail].reverse().find(p=>PAGES[p]&&p!==screen)||fallback;
+ return '<div class="page-header"><button class="back" aria-label="Volver a '+clean(PAGES[previous]||'Inicio')+'" onclick="moqsaGoBack()">'+I('back')+'</button><span class="crumb">Volver a '+clean(PAGES[previous]||'Inicio')+'</span></div>';
+};
 render();loadConfig();
