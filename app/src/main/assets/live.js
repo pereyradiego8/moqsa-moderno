@@ -1,6 +1,6 @@
 'use strict';
 /* Nueva experiencia V3: datos de servicio, jamás líneas ni arribos simulados. */
-const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],route:[],line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearError:'',nearLoading:false,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
+const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],route:[],line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearAccuracy:null,nearDiagnostic:null,nearError:'',nearLoading:false,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
 const calls=new Map();let callNo=0;
 function native(action,params={}){
  return new Promise((resolve,reject)=>{
@@ -309,43 +309,78 @@ function distanceText(m){
 }
 async function loadNearby(){
  if(dataV3.nearLoading)return;
- dataV3.nearLoading=true;dataV3.nearError='';render();
+ dataV3.nearLoading=true;dataV3.nearError='';dataV3.nearDiagnostic=null;dataV3.nearby=[];render();
  try{
   const location=await native('location.get');
   if(!validGeoPoint(location))throw Error('El teléfono no devolvió una ubicación válida');
   dataV3.nearLocation={lat:location.lat,lon:location.lon};
+  dataV3.nearAccuracy=Number.isFinite(Number(location.precisionMetros))?
+   Math.max(0,Math.round(Number(location.precisionMetros))):null;
   const response=await native('nearby',{lat:String(location.lat),lon:String(location.lon)});
-  if(!Array.isArray(response.items))throw Error('Respuesta inesperada de paradas cercanas');
+  if(!Array.isArray(response.items))throw Error('Respuesta SOAP inesperada; no se pudieron interpretar paradas');
   dataV3.nearby=response.items;
+  dataV3.nearDiagnostic={
+   codigoEstado:response.codigoEstado,
+   mensaje:String(response.mensaje||'').slice(0,250),
+   originales:Number(response.registrosOriginales),
+   interpretados:Number(response.registrosInterpretados)
+  };
  }catch(e){dataV3.nearError=e.message||'No se pudieron obtener paradas cercanas';}
  dataV3.nearLoading=false;render();
 }
+function nearbyStateCard(){
+ if(!dataV3.nearLocation||dataV3.nearLoading)return '';
+ const d=dataV3.nearDiagnostic;
+ let out='<div class="card"><h3>Resultado de la búsqueda</h3>';
+ if(dataV3.nearAccuracy!=null){
+   out+='<p>Precisión estimada del GPS: <strong>'+clean(dataV3.nearAccuracy)+' m</strong></p>';
+   if(dataV3.nearAccuracy>500)out+='<p>La ubicación es poco precisa. Activá ubicación precisa y volvé a buscar.</p>';
+ }
+ if(d){
+   const original=Number.isFinite(d.originales)?d.originales:null;
+   const parsed=Number.isFinite(d.interpretados)?d.interpretados:dataV3.nearby.length;
+   if(original!==null && original>0 && parsed===0){
+     out+='<p><strong>La respuesta tiene paradas, pero esta versión no pudo interpretarlas.</strong> Es un problema de la aplicación, no de tu ubicación.</p>';
+   }else if(original===0){
+     out+='<p><strong>El servidor original respondió sin paradas.</strong> Su radio de búsqueda no está documentado y no puede ampliarse desde esta pantalla.</p>';
+   }else{
+     out+='<p>Registros recibidos: <strong>'+clean(parsed)+'</strong></p>';
+   }
+   if(d.mensaje)out+='<p>Mensaje del servidor: '+clean(d.mensaje)+'</p>';
+   if(d.codigoEstado!=null&&d.codigoEstado!=='')out+='<p>Estado del servicio: '+clean(d.codigoEstado)+'</p>';
+ }
+ if(dataV3.nearError)out+='<p><strong>Error:</strong> '+clean(dataV3.nearError)+'</p>';
+ out+='</div><button class="secondary map-action" onclick="openNearMap()">'+I('pin')+
+  ' Comprobar mi ubicación en el mapa</button>';
+ return out;
+}
 function nearbyV3(){
- let out=intro('Paradas cerca tuyo','Ubicamos tu teléfono solo cuando lo pedís. Las paradas provienen del servicio original.','CERCA DE MÍ')+
+ let out=intro('Paradas cerca tuyo','Buscamos paradas del servicio original según la ubicación de tu teléfono.','CERCA DE MÍ')+
  '<div class="card"><h3>Buscar paradas cercanas</h3>'+
- '<p>Al tocar Buscar, Android te pedirá acceso a la ubicación. La posición se envía únicamente al servidor SOAP original para buscar paradas cercanas; no se almacena ni se comparte con Vercel.</p>'+
+ '<p>Android pide permiso cuando tocás Buscar. La ubicación se envía al servidor SOAP original para consultar paradas, sin pasar por servidores propios.</p>'+
  '<button class="primary" onclick="loadNearby()" '+(dataV3.nearLoading?'disabled':'')+'>'+
  I('pin')+' '+(dataV3.nearLoading?'Buscando tu ubicación…':'Buscar paradas cerca de mí')+'</button></div>';
- if(dataV3.nearError)out+='<div class="card empty"><h3>No se pudo buscar</h3><p>'+clean(dataV3.nearError)+'</p></div>';
  if(dataV3.nearby.length){
   const list=dataV3.nearby.map((stop,i)=>({stop,i,d:metersBetween(dataV3.nearLocation,stop)}))
     .sort((a,b)=>(a.d??Number.MAX_VALUE)-(b.d??Number.MAX_VALUE));
   out+='<div class="headrow"><h3>Paradas encontradas ('+list.length+')</h3></div>';
   if(geoPoints(dataV3.nearby).length)
-    out+='<button class="secondary map-action" onclick="openNearMap()">'+I('pin')+' Ver paradas y mi ubicación en el mapa</button>';
+   out+='<button class="secondary map-action" onclick="openNearMap()">'+I('pin')+' Ver paradas en el mapa</button>';
   out+=list.slice(0,60).map(({stop,i,d})=>{
-    const label=stopHeading(stop)==='Sentido no informado'?
-      (stop.nombre||stop.identificador||'Parada'):stopHeading(stop);
-    const summary=[
-      stop.lineaNombre?'Línea '+stop.lineaNombre:'',
-      stop.identificador?'Parada '+stop.identificador:'',
-      d!=null?distanceText(d):''
-    ].filter(Boolean).join(' · ');
-    return item(label,summary||'Parada cercana','openNearbyStop('+i+')','pin');
+   const label=stopHeading(stop)==='Sentido no informado'?
+    (stop.nombre||stop.identificador||'Parada'):stopHeading(stop);
+   const summary=[stop.lineaNombre?'Línea '+stop.lineaNombre:'',
+    stop.identificador?'Parada '+stop.identificador:'',d!=null?distanceText(d):'']
+    .filter(Boolean).join(' · ');
+   return item(label,summary||'Parada cercana','openNearbyStop('+i+')','pin');
   }).join('');
- }else if(!dataV3.nearLoading&&!dataV3.nearError&&dataV3.nearLocation){
-  out+=notice('El servicio original no informó paradas cerca de la ubicación consultada.');
+ }else if(!dataV3.nearLoading&&!dataV3.nearError&&dataV3.nearDiagnostic){
+  out+=notice('No se encontraron paradas en la respuesta. Esto no significa que no existan paradas en tu barrio: depende de la cobertura del servidor original.');
+  out+='<button class="secondary" onclick="go(\\'lines\\')">Buscar paradas por línea</button>';
  }
+ if(dataV3.nearLocation&&!dataV3.nearLoading)out+=nearbyStateCard();
+ if(dataV3.nearError&&!dataV3.nearLocation)
+  out+='<div class="card empty"><h3>No se pudo buscar</h3><p>'+clean(dataV3.nearError)+'</p></div>';
  return out;
 }
 function openNearbyStop(i){
