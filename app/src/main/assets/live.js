@@ -24,13 +24,22 @@ function feedback(){
  (dataV3.error?'<div class="card empty"><h3>No pudimos completar la consulta</h3><p>Probá nuevamente.</p><button class="secondary" onclick="retryScreen()">Reintentar</button></div>':'');
 }
 const empty=label=>'<div class="card empty"><h3>Sin '+clean(label)+'</h3><p>No encontramos información por el momento.</p></div>';
+const fieldRequests=Object.create(null);
+function invalidateStopRequests(){
+ for(const field of ['streets','crossings','stops'])fieldRequests[field]=(fieldRequests[field]||0)+1;
+}
 async function request(action,params,field){
+ const requestId=fieldRequests[field]=(fieldRequests[field]||0)+1;
  dataV3.loading=true;dataV3.error='';render();
  try{
   const resp=await native(action,params);
+  if(fieldRequests[field]!==requestId)return;
   if(!resp||!Array.isArray(resp.items))throw Error('Respuesta de API en formato inesperado');
   dataV3[field]=resp.items;dataV3.mensaje=String(resp.mensaje||'').trim();dataV3.loading=false;render();
- }catch(e){dataV3.loading=false;dataV3.mensaje='';dataV3.error=e.message||'Error de conexión';render();}
+ }catch(e){
+  if(fieldRequests[field]!==requestId)return;
+  dataV3.loading=false;dataV3.mensaje='';dataV3.error=e.message||'Error de conexión';render();
+ }
 }
 function retryScreen(){if(screen==='arrival')loadArrivals();else if(screen==='lines')loadLines();else if(screen==='stops'&&dataV3.line)request('streets',{linea:dataV3.line.id},'streets');}
 function stopHeading(r){
@@ -248,6 +257,8 @@ function filterLines(){
 async function loadLines(){await request('lines',{},'lines');}
 function chooseLine(i){
  const selected=dataV3.lines[i];if(!selected)return;
+ stopSteps.length=0;
+ invalidateStopRequests();
  dataV3.line=selected;dataV3.locality=null;dataV3.street=null;dataV3.crossing=null;dataV3.stop=null;dataV3.streets=[];dataV3.crossings=[];dataV3.stops=[];dataV3.route=[];
  go('stops');request('streets',{linea:selected.id},'streets');
 }
@@ -277,6 +288,9 @@ function optionsV3(rows,index){
  return orderedRows(rows).map(({r,i})=>'<option value="'+i+'"'+(index===String(i)?' selected':'')+'>'+clean(r.nombre||r.id)+'</option>').join('');
 }
 function chooseLocality(city){
+ if((city||null)===dataV3.locality)return;
+ rememberStopStep();
+ invalidateStopRequests();
  dataV3.locality=city||null;
  dataV3.street=null;dataV3.crossing=null;dataV3.crossings=[];dataV3.stops=[];dataV3.error='';
  render();
@@ -301,12 +315,19 @@ function stopsV3(){
 }
 function chooseStreet(i){
  if(i==='')return;const selected=dataV3.streets[Number(i)];if(!selected||streetCity(selected)!==dataV3.locality)return;
+ if(dataV3.street===String(i))return;
+ rememberStopStep();
+ invalidateStopRequests();
  dataV3.street=i;dataV3.crossing=null;dataV3.crossings=[];dataV3.stops=[];
  request('crossings',{linea:dataV3.line.id,calle:selected.id},'crossings');
 }
 function chooseCrossing(i){
  if(i==='')return;const s=dataV3.streets[Number(dataV3.street)],c=dataV3.crossings[Number(i)];
- if(!s||!c)return;dataV3.crossing=i;dataV3.stops=[];
+ if(!s||!c)return;
+ if(dataV3.crossing===String(i))return;
+ rememberStopStep();
+ invalidateStopRequests();
+ dataV3.crossing=i;dataV3.stops=[];
  request('stops',{linea:dataV3.line.id,calle:s.id,interseccion:c.id},'stops');
 }
 function chooseStop(i){
@@ -779,10 +800,41 @@ function helpV3(){
 makers.help=helpV3;
 const oldGo=go;
 const navTrail=[];
+const stopSteps=[];
 const MAX_NAV_TRAIL=60;
+const MAX_STOP_STEPS=30;
+function snapshotStopStep(){
+ return {
+  locality:dataV3.locality,street:dataV3.street,crossing:dataV3.crossing,
+  crossings:dataV3.crossings,stops:dataV3.stops,
+  scroll:typeof root!=='undefined'&&root?root.scrollTop:0
+ };
+}
+function rememberStopStep(){
+ stopSteps.push(snapshotStopStep());
+ if(stopSteps.length>MAX_STOP_STEPS)stopSteps.shift();
+}
+function restoreStopStep(){
+ if(!stopSteps.length)return false;
+ invalidateStopRequests();
+ const previous=stopSteps.pop();
+ dataV3.locality=previous.locality;
+ dataV3.street=previous.street;
+ dataV3.crossing=previous.crossing;
+ dataV3.crossings=previous.crossings||[];
+ dataV3.stops=previous.stops||[];
+ dataV3.loading=false;dataV3.error='';
+ render();
+ if(typeof root!=='undefined'&&root)root.scrollTop=previous.scroll||0;
+ return true;
+}
 
 function snapshotNavScreen(){
  const previous={page:screen,scroll:typeof root!=='undefined'&&root?root.scrollTop:0};
+ if(screen==='stops'){
+  previous.stops=snapshotStopStep();
+  previous.stopSteps=stopSteps.slice();
+ }
  if(screen==='routes'){
   previous.route={
    line:dataV3.routeLine,items:dataV3.route,query:dataV3.routeQuery,
@@ -792,6 +844,16 @@ function snapshotNavScreen(){
  return previous;
 }
 function restoreNavScreen(entry){
+ if(entry.stops && entry.page==='stops'){
+  invalidateStopRequests();
+  dataV3.locality=entry.stops.locality;
+  dataV3.street=entry.stops.street;
+  dataV3.crossing=entry.stops.crossing;
+  dataV3.crossings=entry.stops.crossings||[];
+  dataV3.stops=entry.stops.stops||[];
+  dataV3.loading=false;dataV3.error='';
+  stopSteps.splice(0,stopSteps.length,...(entry.stopSteps||[]));
+ }
  if(entry.route && entry.page==='routes'){
   dataV3.routeRequestId++;
   dataV3.routeLine=entry.route.line;
@@ -832,6 +894,7 @@ window.moqsaGoBack=function(){
   backToRouteLines();
   return true;
  }
+ if(screen==='stops'&&restoreStopStep())return true;
  while(navTrail.length){
   const previous=navTrail.pop();
   if(!previous||!PAGES[previous.page]||previous.page===screen)continue;
@@ -845,6 +908,10 @@ window.moqsaGoBack=function(){
  return false;
 };
 back=function(fallback='home'){
+ if(screen==='stops'&&stopSteps.length){
+  return '<div class="page-header"><button class="back" aria-label="Volver al paso anterior" onclick="moqsaGoBack()">'+
+   I('back')+'</button><span class="crumb">Volver al paso anterior</span></div>';
+ }
  if(screen==='routes'&&dataV3.routeLine){
   return '<div class="page-header"><button class="back" aria-label="Volver a recorridos" onclick="moqsaGoBack()">'+
    I('back')+'</button><span class="crumb">Volver a recorridos</span></div>';
