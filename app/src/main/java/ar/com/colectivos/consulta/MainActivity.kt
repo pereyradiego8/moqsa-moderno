@@ -20,6 +20,7 @@ class MainActivity : Activity() {
     private val executor = Executors.newSingleThreadExecutor()
     private val directSettings by lazy { DirectSettings(this) }
     private val directSoap by lazy { OriginalSoap(directSettings) }
+    private val userLocation by lazy { UserLocation(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,6 +64,23 @@ class MainActivity : Activity() {
     private inner class Bridge {
         @JavascriptInterface
         fun call(id: Int, action: String, parameters: String) {
+            if (action == "location.get") {
+                runOnUiThread {
+                    userLocation.request { point, error ->
+                        val response = if (point != null)
+                            JSONObject().put("ok", true).put("data", point)
+                        else
+                            JSONObject().put("ok", false).put("error", error ?: "Sin ubicación")
+                        if (!isFinishing && !isDestroyed) {
+                            web.evaluateJavascript(
+                                "window.moqsaNativeResult(" + id + "," +
+                                JSONObject.quote(response.toString()) + ")", null
+                            )
+                        }
+                    }
+                }
+                return
+            }
             executor.execute {
                 val response = try {
                     val args = JSONObject(parameters)
@@ -123,7 +141,15 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        userLocation.onPermissionResult(requestCode, grantResults)
+    }
+
     override fun onDestroy() {
+        if (::web.isInitialized) userLocation.stop()
         executor.shutdownNow()
         web.removeJavascriptInterface("AndroidApi")
         web.destroy()
