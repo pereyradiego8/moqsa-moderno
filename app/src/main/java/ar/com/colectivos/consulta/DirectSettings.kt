@@ -12,13 +12,19 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** Sólo el teléfono guarda las credenciales; no se incluyen en el repositorio público. */
-class DirectSettings(context: Context) {
+class DirectSettings(private val context: Context) {
     private val prefs = context.getSharedPreferences("moqsa_direct_soap", Context.MODE_PRIVATE)
     private val alias = "moqsa_original_soap_user_credentials_v1"
-    // Private build placeholders. They are invalid in public builds.
-    private val bundledUser = "ZZZZZZZZZZZZZ"
-    private val bundledPassword = "ZZZZZZZZZZZZZZZZ"
-    private fun hasBundledAccess() = !bundledUser.startsWith("Z") && !bundledPassword.startsWith("Z")
+    // El acceso privado viaja en un recurso de datos, nunca alterando classes.dex.
+    // El archivo de GitHub sólo contiene valores de muestra que no autentican.
+    private val bundledAccess: Pair<String, String>? by lazy {
+        val values = context.assets.open("direct_auth.dat").bufferedReader(Charsets.UTF_8)
+            .use { it.readText().lines().filter(String::isNotEmpty) }
+        if (values.size != 2) null
+        else if (values[0].length != 13 || values[1].length != 16) null
+        else if (values[0].all { it == 'Z' } || values[1].all { it == 'Z' }) null
+        else values[0] to values[1]
+    }
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         val found = store.getKey(alias, null)
@@ -50,11 +56,11 @@ class DirectSettings(context: Context) {
         .put("entity", 4)
         .put("appCode", 24)
         .put("configured", hasCredentials())
-    fun hasCredentials(): Boolean = prefs.contains("credentials") || hasBundledAccess()
+    fun hasCredentials(): Boolean = prefs.contains("credentials") || bundledAccess != null
     fun credentials(): Pair<String, String> {
         val saved = prefs.getString("credentials", "") ?: ""
         if (saved.isBlank()) {
-            if (hasBundledAccess()) return bundledUser to bundledPassword
+            bundledAccess?.let { return it }
             throw IllegalStateException("Faltan credenciales del servidor original. Configuralas en Ajustes.")
         }
         val parsed = JSONObject(decrypt(saved))
