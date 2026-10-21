@@ -28,9 +28,9 @@ class OriginalSoap(private val settings: DirectSettings) {
     }
 
     fun execute(action: String, q: JSONObject): JSONObject {
-        if (action != "nearby") return executeOnce(action, q, null)
+        if (action != "nearby" && action != "nearbyArrivals") return executeOnce(action, q, null)
 
-        // El servicio admite una lista de empresas, pero con "191,7" devolvía
+        // Los métodos de cercanía aceptan lista de empresas, pero con "191,7" devolvía
         // FormatException (-9). Probamos los DOS códigos ya configurados, de a uno.
         // Solo bajo demanda; las consultas de llegadas no se modifican.
         val combined = JSONArray()
@@ -38,6 +38,7 @@ class OriginalSoap(private val settings: DirectSettings) {
         var rawCount = 0
         var healthy = 0
         val warnings = ArrayList<String>()
+        val previousCompanies = HashSet<String>()
         for (company in listOf("191", "7")) {
             try {
                 val response = executeOnce(action, q, company)
@@ -52,23 +53,37 @@ class OriginalSoap(private val settings: DirectSettings) {
                     continue
                 }
                 healthy++
-                rawCount += response.optInt("registrosOriginales", 0)
+                rawCount += response.optInt("registrosOriginales",
+                    response.optJSONArray("items")?.length() ?: 0)
                 val rows = response.optJSONArray("items") ?: JSONArray()
+                val currentKeys = HashSet<String>()
                 for (i in 0 until rows.length()) {
-                    val stop = rows.optJSONObject(i) ?: continue
-                    val key = stop.optString("identificador").ifBlank {
-                        stop.optString("codigoInterno").ifBlank { stop.toString() }
+                    val record = rows.optJSONObject(i) ?: continue
+                    if (action == "nearby") {
+                        val key = record.optString("identificador").ifBlank {
+                            record.optString("codigoInterno").ifBlank { record.toString() }
+                        }
+                        if (seen.add(key)) combined.put(record)
+                    } else {
+                        // No fusionar dos colectivos de una misma empresa con idéntica ETA.
+                        // Evitar solamente repeticiones entre respuestas de empresas.
+                        val key = listOf("linea","destino","arribo","lat","lon").joinToString("|") {
+                            record.optString(it)
+                        }
+                        if (!previousCompanies.contains(key)) combined.put(record)
+                        currentKeys.add(key)
                     }
-                    if (seen.add(key)) combined.put(stop)
                 }
+                previousCompanies.addAll(currentKeys)
             } catch (_: Exception) {
                 warnings.add("No se pudo completar una consulta de cercanía")
             }
         }
         if (healthy == 0) {
             throw IllegalStateException(
-                "El servicio original rechazó la consulta de paradas cercanas. " +
-                "La función Cerca es experimental y no se puede confirmar cobertura."
+                if (action == "nearbyArrivals")
+                    "El servidor original no pudo consultar los arribos de esta parada."
+                else "El servicio original rechazó la búsqueda de paradas cercanas."
             )
         }
         return JSONObject()
@@ -77,7 +92,8 @@ class OriginalSoap(private val settings: DirectSettings) {
             .put("registrosOriginales", rawCount)
             .put("registrosInterpretados", combined.length())
             .put("codigoEstado", if (warnings.isEmpty()) 0 else 1)
-            .put("mensaje", if (warnings.isEmpty()) "Consulta de cercanía completada."
+            .put("mensaje", if (warnings.isEmpty()) if (action == "nearbyArrivals") "Consulta de arribos de todas las líneas completada."
+                 else "Consulta de cercanía completada."
                 else "Resultado parcial: " + warnings.joinToString("; ") + ".")
             .put("parcial", warnings.isNotEmpty())
             .put("fuente", "SOAP original MOQSA")
@@ -123,6 +139,20 @@ class OriginalSoap(private val settings: DirectSettings) {
                 operation = "RecuperarRecorridoParaMapaAbrevYAmpliPorEntidadYLinea"
                 params["codigoLineaParada"] = required(q, "linea")
             }
+            "nearbyArrivals" -> {
+                // Operación del WSDL original destinada a consultar todas las líneas
+                // disponibles para un identificador de parada, sin seleccionar línea.
+                operation = "RecuperarProximosArribosParaParadasCercanas"
+                params["usuario"] = user
+                params["clave"] = pass
+                params["identificadorParada"] = required(q, "parada")
+                params["listaCodigosEmpresas"] = companyCode
+                    ?: throw IllegalArgumentException("Código de empresa requerido")
+                params["codigoAplicacion"] = "24"
+                params["localidad"] = "QUILMES"
+                params["isSublinea"] = "false"
+                params["isSoloAdaptados"] = "false"
+            }
             "nearby" -> {
                 operation = "RecuperarParadasMasCercanasPorLocalidadProvinciaPais"
                 // Respetar el orden del WSDL: usuario, clave, latitud, longitud...
@@ -139,7 +169,7 @@ class OriginalSoap(private val settings: DirectSettings) {
             }
             else -> throw IllegalArgumentException("Operación SOAP desconocida")
         }
-        if (action != "lines" && action != "nearby") {
+        if (action != "lines" && action != "nearby" && action != "nearbyArrivals") {
             params["usuario"] = user
             params["clave"] = pass
         }
@@ -218,10 +248,13 @@ class OriginalSoap(private val settings: DirectSettings) {
                 throw IllegalStateException("El servidor no reconoció esta parada. Se puede reintentar la consulta.")
             }
             val output = JSONObject().put("ok", true).put("items", items).put("mensaje", message)
-            if (action == "nearby") {
+            if (action == "nearby" || action == "nearbyArrivals") {
                 // No son datos personales: solo la cantidad y el estado que informa el SOAP.
                 // Diferencia lista realmente vacía de filas recibidas pero no interpretadas.
-                val rawCount = rows(payload, arrayOf("Parada", "Paradas", "ListadoParadas")).length()
+                val rawCount = if (action == "nearby")
+                    rows(payload, arrayOf("Parada", "Paradas", "ListadoParadas")).length()
+                else rows(payload, arrayOf("Arribos","Arribo","ProximosArribos",
+                    "ProximoArribo","ArribosParadasCercanas")).length()
                 output.put("registrosOriginales", rawCount)
                 output.put("codigoEstado", value(payload, "CodigoEstado", "codigoEstado") ?: JSONObject.NULL)
                 output.put("registrosInterpretados", items.length())
@@ -297,7 +330,8 @@ class OriginalSoap(private val settings: DirectSettings) {
             "streets" -> arrayOf("Calles","Calle")
             "crossings" -> arrayOf("Calles","Intersecciones","Interseccion")
             "stops","nearby" -> arrayOf("Parada","Paradas","ListadoParadas")
-            "arrivals" -> arrayOf("Arribos","Arribo","ProximosArribos","ProximoArribo")
+            "arrivals","nearbyArrivals" -> arrayOf("Arribos","Arribo","ProximosArribos",
+                "ProximoArribo","ArribosParadasCercanas","ProximosArribosParaParadasCercanas")
             "route" -> arrayOf("Puntos","Recorrido")
             else -> arrayOf("items")
         }
@@ -330,6 +364,13 @@ class OriginalSoap(private val settings: DirectSettings) {
                     val first = str(obj,"CallePrincipal","NombreCalle")
                     val second = str(obj,"CalleInterseccion","InterseccionCalle")
                     normalized.put("detalle", listOf(first,second).filter { it.isNotBlank() }.joinToString(" y "))
+                    normalized.put("callePrincipal",first)
+                    normalized.put("cruce1",second)
+                    normalized.put("cruce2",str(obj,"CalleInterseccion2",
+                        "SegundaInterseccion","CalleEntre2","CalleSecundaria2"))
+                    normalized.put("altura",str(obj,"Altura","Numero","Numeracion"))
+                    normalized.put("direccion",str(obj,"Direccion","DireccionCompleta",
+                        "Ubicacion","CalleYAltura"))
                     // La APK 1.7 conserva estos campos de la bandera de cada parada.
                     val sentido = str(obj,"LineaBanderaYbanAmpliada",
                         "LineaBanderaYbanampliada","AbreviaturaAmpliadaBandera",
@@ -343,8 +384,9 @@ class OriginalSoap(private val settings: DirectSettings) {
                     normalized.put("lat",number(obj,"Latitud"))
                     normalized.put("lon",number(obj,"Longitud"))
                 }
-                "arrivals" -> {
-                    normalized.put("linea",str(obj,"DescripcionLinea","Linea"))
+                "arrivals","nearbyArrivals" -> {
+                    normalized.put("linea",str(obj,"DescripcionLinea","Linea",
+                        "NumeroLinea","AbreviaturaLinea","LineaDescripcion"))
                     normalized.put("destino",str(obj,"DescripcionBandera","Destino","Bandera","AbrevBandera"))
                     normalized.put("arribo",str(obj,"Arribo","Tiempo","ProximoArribo"))
                     normalized.put("lat",number(obj,"Latitud"))
@@ -359,7 +401,7 @@ class OriginalSoap(private val settings: DirectSettings) {
                     normalized.put("lon",number(obj,"Longitud"))
                 }
             }
-            if (kind == "arrivals" ||
+            if (kind == "arrivals" || kind == "nearbyArrivals" ||
                 normalized.optString("id").isNotBlank() || normalized.optString("nombre").isNotBlank()) out.put(normalized)
         }
         return out
