@@ -1,11 +1,11 @@
 'use strict';
 /* Nueva experiencia V3: datos de servicio, jamás líneas ni arribos simulados. */
-const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],route:[],line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearAccuracy:null,nearDiagnostic:null,nearError:'',nearLoading:false,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
+const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],route:[],line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearAccuracy:null,nearDiagnostic:null,nearError:'',nearLoading:false,nearStop:null,nearStopArrivals:[],nearStopMessage:'',nearStopError:'',nearStopLoading:false,nearStopPartial:false,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
 const calls=new Map();let callNo=0;
 function native(action,params={}){
  return new Promise((resolve,reject)=>{
   if(!window.AndroidApi){reject(Error('Abrí el APK Android para realizar consultas reales.'));return;}
-  const id=++callNo,t=setTimeout(()=>{calls.delete(id);reject(Error('Se agotó el tiempo de espera de la consulta.'));},25000);
+  const id=++callNo,t=setTimeout(()=>{calls.delete(id);reject(Error('Se agotó el tiempo de espera de la consulta.'));},action==="nearby"||action==="nearbyArrivals"?65000:25000);
   calls.set(id,{resolve,reject,t});
   try{window.AndroidApi.call(id,action,JSON.stringify(params));}catch(e){clearTimeout(t);calls.delete(id);reject(e);}
  });
@@ -369,12 +369,9 @@ function nearbyV3(){
   if(geoPoints(dataV3.nearby).length)
    out+='<button class="secondary map-action" onclick="openNearMap()">'+I('pin')+' Ver paradas en el mapa</button>';
   out+=list.slice(0,60).map(({stop,i,d})=>{
-   const label=stopHeading(stop)==='Sentido no informado'?
-    (stop.nombre||stop.identificador||'Parada'):stopHeading(stop);
-   const summary=[stop.lineaNombre?'Línea '+stop.lineaNombre:'',
-    stop.identificador?'Parada '+stop.identificador:'',d!=null?distanceText(d):'']
-    .filter(Boolean).join(' · ');
-   return item(label,summary||'Parada cercana','openNearbyStop('+i+')','pin');
+   const loc=nearbyStopLocation(stop);
+   const summary=[loc.details,d!=null?distanceText(d):''].filter(Boolean).join(' · ');
+   return item(loc.street,summary,'openNearbyStop('+i+')','pin');
   }).join('');
  }else if(!dataV3.nearLoading&&!dataV3.nearError&&dataV3.nearDiagnostic){
   out+=notice('Sin paradas informadas por el servicio. Cerca es una función experimental; podés buscar normalmente por línea y localidad.');
@@ -385,16 +382,112 @@ function nearbyV3(){
   out+='<div class="card empty"><h3>No se pudo buscar</h3><p>'+clean(dataV3.nearError)+'</p></div>';
  return out;
 }
+function nearbyStopLocation(stop){
+ const main=String(stop?.callePrincipal||'').trim();
+ const cross1=String(stop?.cruce1||'').trim();
+ const cross2=String(stop?.cruce2||'').trim();
+ const height=String(stop?.altura||'').trim();
+ const address=String(stop?.direccion||'').trim();
+ const rawName=String(stop?.nombre||'').trim();
+ const isCode=s=>!s||/^MO[- ]?\\d+$/i.test(s)||/^\\d+$/.test(s);
+ let street=main;
+ if(!street && address && !isCode(address))street=address;
+ if(!street && rawName && !isCode(rawName))street=rawName;
+ if(!street && String(stop?.detalle||'').trim())street=String(stop.detalle).trim();
+ let details='';
+ if(cross1&&cross2 && cross1.toLocaleLowerCase('es-AR')!==cross2.toLocaleLowerCase('es-AR'))
+  details='Entre '+cross1+' y '+cross2;
+ else if(cross1)details='Cruce con '+cross1;
+ else if(cross2)details='Cruce con '+cross2;
+ else details='Intersecciones no informadas por el servicio';
+ return {street:street||'Calle no informada',details,at:height&&!street.includes(height)?'Altura '+height:''};
+}
+function nearStopArrivalsSorted(items){
+ return [...(Array.isArray(items)?items:[])].sort((a,b)=>{
+  const parse=v=>{
+   const match=String(v?.arribo||'').match(/(\\d{1,4})\\s*min/i);
+   return match?Number(match[1]):Number.MAX_VALUE;
+  };
+  return parse(a)-parse(b);
+ });
+}
+async function loadNearStopArrivals(){
+ const stop=dataV3.nearStop;
+ if(!stop || dataV3.nearStopLoading)return;
+ dataV3.nearStopArrivals=[];dataV3.nearStopError='';dataV3.nearStopMessage='';
+ const ident=stopIdentifier(stop);
+ if(!ident){
+  dataV3.nearStopError='El proveedor no informó el identificador necesario para consultar esta parada.';
+  render();return;
+ }
+ dataV3.nearStopLoading=true;render();
+ try{
+  const response=await native('nearbyArrivals',{parada:ident});
+  if(!Array.isArray(response.items))throw Error('El servidor no devolvió un formato válido de arribos');
+  dataV3.nearStopArrivals=nearStopArrivalsSorted(response.items);
+  dataV3.nearStopMessage=String(response.mensaje||'');
+  dataV3.nearStopPartial=Boolean(response.parcial);
+ }catch(e){
+  dataV3.nearStopError=e.message||'Error consultando los arribos de esta parada';
+ }
+ dataV3.nearStopLoading=false;render();
+}
 function openNearbyStop(i){
  const stop=dataV3.nearby[i];if(!stop)return;
- // Solo abrir los arribos cuando la respuesta contiene ambos identificadores.
- if(stop.lineaId&&stopIdentifier(stop)){
-  dataV3.line={id:stop.lineaId,nombre:stop.lineaNombre||stop.lineaId};
-  dataV3.stop=stop;dataV3.arrivals=[];dataV3.error='';go('arrival');loadArrivals();
- }else{
-  toast('El servicio no informó línea y parada suficientes para consultar arribos. Elegí una línea.');
-  go('lines');
- }
+ dataV3.nearStop=stop;
+ dataV3.nearStopArrivals=[];
+ dataV3.nearStopError='';
+ dataV3.nearStopMessage='';
+ dataV3.nearStopPartial=false;
+ go('nearStop');
+ loadNearStopArrivals();
+}
+function openNearStopMap(){
+ if(!dataV3.nearStop)return;
+ const point=validGeoPoint(dataV3.nearStop,nearbyStopLocation(dataV3.nearStop).street,'stop');
+ const buses=geoPoints(dataV3.nearStopArrivals,a=>'Línea '+String(a.linea||'')+' · '+String(a.arribo||''),'bus');
+ const points=[...(point?[point]:[]),...buses];
+ openMap('stops','Parada cercana · Todas las líneas',points);
+}
+function nearArrivalCard(a,i){
+ const eta=etaParts(a.arribo);
+ const line=String(a.linea||'').trim();
+ const destination=String(a.destino||'').trim();
+ const num=eta.number?
+  '<div class="eta-number">'+clean(eta.number)+'</div><span class="eta-unit">'+clean(eta.suffix)+'</span>':
+  '<div class="eta-other">'+clean(eta.suffix)+'</div>';
+ return '<div class="arrival-highlight">'+
+   '<div class="arrival-eta"><span class="eta-kicker">'+(i===0?'PRÓXIMO':'SIGUIENTE')+'</span>'+num+'</div>'+
+   '<div class="arrival-details"><strong class="arrival-line">'+clean(line?'Línea '+line:'Línea no informada')+'</strong>'+
+   '<span class="arrival-destination">'+clean(destination||'Destino no informado')+'</span>'+
+   '<span class="arrival-position">'+(validGeoPoint(a,'','bus')?'Ubicación en mapa disponible':'Ubicación GPS del colectivo no informada')+'</span></div></div>';
+}
+function nearbyStopV3(){
+ const stop=dataV3.nearStop;
+ if(!stop)return back('near')+intro('Parada cercana','Seleccioná una parada desde Cerca.','DETALLE DE PARADA');
+ const address=nearbyStopLocation(stop);
+ const distance=metersBetween(dataV3.nearLocation,stop);
+ const name=clean(address.street);
+ let out=back('near')+intro('Parada cercana',name,'CERCA DE MÍ')+
+   '<div class="card near-address"><div class="eyebrow">UBICACIÓN DE LA PARADA</div>'+
+   '<h3>'+name+'</h3>'+
+   (address.at?'<p>'+clean(address.at)+'</p>':'')+
+   '<p>'+clean(address.details)+'</p>'+
+   (stop.localidad?'<p>'+clean(stop.localidad)+'</p>':'')+
+   (distance!=null?'<p>'+clean(distanceText(distance))+' desde tu ubicación</p>':'')+'</div>'+
+   '<div class="card arrival-panel"><div class="cardhead"><h3>Todas las líneas que llegan</h3></div>';
+ if(dataV3.nearStopArrivals.length)out+=dataV3.nearStopArrivals.map(nearArrivalCard).join('');
+ else if(dataV3.nearStopLoading)out+='<p>Consultando llegadas de las empresas disponibles…</p>';
+ else if(dataV3.nearStopError)out+='<p>No fue posible obtener arribos de esta parada.</p>';
+ else out+='<p>El proveedor no informó estimaciones para esta parada en este momento.</p>';
+ out+='</div>';
+ if(dataV3.nearStopPartial)out+=notice('Resultado parcial: alguna empresa no respondió. Puede haber líneas o arribos no informados.');
+ if(dataV3.nearStopError)out+='<div class="card empty"><h3>Consulta no disponible</h3><p>'+clean(dataV3.nearStopError)+'</p></div>';
+ out+='<button class="primary" onclick="loadNearStopArrivals()" '+(dataV3.nearStopLoading?'disabled':'')+'>'+I('refresh')+
+   (dataV3.nearStopLoading?' Consultando…':' Actualizar todas las llegadas')+'</button>';
+ if(validGeoPoint(stop)||geoPoints(dataV3.nearStopArrivals).length)
+   out+='<button class="secondary map-action" onclick="openNearStopMap()">'+I('pin')+' Ubicar esta parada y colectivos</button>';
+ return out;
 }
 function settingsV3(){
  return intro('Servidor original de MOQSA','Conexión HTTPS directa sin servicios intermedios.','CONEXIÓN SOAP')+
@@ -439,6 +532,8 @@ function pendingV3(title){return intro(title,'Sección todavía no conectada al 
  '<button class="secondary" onclick="go(\'lines\')">Consultar líneas</button>';}
 makers.home=mainV3;makers.more=menuV3;makers.lines=linesV3;makers.stops=stopsV3;makers.arrival=arrivalsV3;
 makers.fav=favsV3;makers.routes=routesV3;makers.map=routesV3;makers.time=arrivalsV3;
+PAGES.nearStop='Detalle de parada';
+makers.nearStop=nearbyStopV3;
 makers.settings=settingsV3;makers.near=nearbyV3;makers.journey=()=>pendingV3('¿Cómo llego?');
 makers.voice=()=>pendingV3('Búsqueda por voz');makers.reload=()=>pendingV3('Puntos de recarga');
 makers.reports=()=>pendingV3('Consultas y reclamos');makers.news=()=>pendingV3('Novedades');
