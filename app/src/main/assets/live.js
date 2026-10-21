@@ -1,6 +1,6 @@
 'use strict';
 /* Nueva experiencia V3: datos de servicio, jamás líneas ni arribos simulados. */
-const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],route:[],line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearAccuracy:null,nearDiagnostic:null,nearError:'',nearLoading:false,nearStop:null,nearStopArrivals:[],nearStopMessage:'',nearStopError:'',nearStopLoading:false,nearStopPartial:false,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
+const dataV3={lines:[],streets:[],crossings:[],stops:[],arrivals:[],route:[],line:null,locality:null,street:null,crossing:null,stop:null,nearby:[],nearLocation:null,nearAccuracy:null,nearDiagnostic:null,nearError:'',nearLoading:false,nearStop:null,nearStopArrivals:[],nearStopMessage:'',nearStopError:'',nearStopLoading:false,nearStopPartial:false,nearStopRequestId:0,error:'',loading:false,backend:'',mensaje:'',arrivalsChecked:false,diagnostico:null,diagnosticando:false};
 const calls=new Map();let callNo=0;
 function native(action,params={}){
  return new Promise((resolve,reject)=>{
@@ -414,6 +414,7 @@ function nearStopArrivalsSorted(items){
 async function loadNearStopArrivals(){
  const stop=dataV3.nearStop;
  if(!stop || dataV3.nearStopLoading)return;
+ const requestId=++dataV3.nearStopRequestId;
  dataV3.nearStopArrivals=[];dataV3.nearStopError='';dataV3.nearStopMessage='';
  const ident=stopIdentifier(stop);
  if(!ident){
@@ -423,17 +424,20 @@ async function loadNearStopArrivals(){
  dataV3.nearStopLoading=true;render();
  try{
   const response=await native('nearbyArrivals',{parada:ident});
+  if(requestId!==dataV3.nearStopRequestId)return;
   if(!Array.isArray(response.items))throw Error('El servidor no devolvió un formato válido de arribos');
   dataV3.nearStopArrivals=nearStopArrivalsSorted(response.items);
   dataV3.nearStopMessage=String(response.mensaje||'');
   dataV3.nearStopPartial=Boolean(response.parcial);
  }catch(e){
+  if(requestId!==dataV3.nearStopRequestId)return;
   dataV3.nearStopError=e.message||'Error consultando los arribos de esta parada';
  }
- dataV3.nearStopLoading=false;render();
+ if(requestId===dataV3.nearStopRequestId){dataV3.nearStopLoading=false;render();}
 }
 function openNearbyStop(i){
  const stop=dataV3.nearby[i];if(!stop)return;
+ ++dataV3.nearStopRequestId;dataV3.nearStopLoading=false;
  dataV3.nearStop=stop;
  dataV3.nearStopArrivals=[];
  dataV3.nearStopError='';
@@ -444,7 +448,11 @@ function openNearbyStop(i){
 }
 function openNearStopMap(){
  if(!dataV3.nearStop)return;
- const point=validGeoPoint(dataV3.nearStop,nearbyStopLocation(dataV3.nearStop).street,'stop');
+ let point=validGeoPoint(dataV3.nearStop,nearbyStopLocation(dataV3.nearStop).street,'stop');
+ if(!point)for(const a of dataV3.nearStopArrivals){
+  point=validGeoPoint({lat:a.latParada,lon:a.lonParada},nearbyStopLocation(dataV3.nearStop).street,'stop');
+  if(point)break;
+ }
  const buses=geoPoints(dataV3.nearStopArrivals,a=>'Línea '+String(a.linea||'')+' · '+String(a.arribo||''),'bus');
  const points=[...(point?[point]:[]),...buses];
  openMap('stops','Parada cercana · Todas las líneas',points);
